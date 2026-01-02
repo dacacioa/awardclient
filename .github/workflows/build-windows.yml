@@ -51,5 +51,8 @@ jobs:
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('run-{0}', github.run_number) }}
         shell: pwsh
         run: |
-          oras push "$env:IMAGE:$env:VERSION" "dist/radioaward_bridge-windows.zip:application/zip"
-          oras push "$env:IMAGE:latest" "dist/radioaward_bridge-windows.zip:application/zip"
+          $artifact = "dist/radioaward_bridge-windows.zip:application/zip"
+          $ref = "{0}:{1}" -f $env:IMAGE, $env:VERSION
+          $latest = "{0}:latest" -f $env:IMAGE
+          oras push $ref $artifact
+          oras push $latest $artifact
