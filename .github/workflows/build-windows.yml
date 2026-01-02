@@ -33,7 +33,14 @@ jobs:
           Compress-Archive -Path dist\radioaward_bridge.exe -DestinationPath dist\radioaward_bridge-windows.zip
 
       - name: Install ORAS
-        run: choco install oras -y
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $orasVersion = "1.2.0"
+          $zipPath = "$env:RUNNER_TEMP\oras.zip"
+          Invoke-WebRequest -Uri "https://github.com/oras-project/oras/releases/download/v$orasVersion/oras_${orasVersion}_windows_amd64.zip" -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath "$env:RUNNER_TEMP\oras"
+          "$env:RUNNER_TEMP\oras" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
