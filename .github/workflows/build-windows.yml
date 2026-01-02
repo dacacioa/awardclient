@@ -42,7 +42,7 @@ jobs:
           VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
         run: |
           $src = "dist/radioaward_bridge.exe"
-          $dest = "dist/radioaward_bridge-$env:VERSION.exe"
+          $dest = "dist/radioaward_bridge-win-$env:VERSION.exe"
           Rename-Item -Path $src -NewName (Split-Path $dest -Leaf)
 
       - name: Package artifact
@@ -50,8 +50,8 @@ jobs:
         env:
           VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
         run: |
-          $zip = "dist/radioaward_bridge-$env:VERSION.zip"
-          $exe = "dist/radioaward_bridge-$env:VERSION.exe"
+          $zip = "dist/radioaward_bridge-win-$env:VERSION.zip"
+          $exe = "dist/radioaward_bridge-win-$env:VERSION.exe"
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $exe -DestinationPath $zip
 
@@ -62,5 +62,5 @@ jobs:
         shell: pwsh
         run: |
           if (-not $env:VERSION) { throw "VERSION no definido." }
-          $asset = "dist/radioaward_bridge-$env:VERSION.zip"
+          $asset = "dist/radioaward_bridge-win-$env:VERSION.zip"
           gh release upload $env:VERSION $asset --clobber

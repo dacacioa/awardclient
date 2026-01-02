@@ -48,16 +48,16 @@ La aplicación guardará la URL base, API key, perfil de log y puerto UDP en
 
 ## Builds automáticos (GitHub Actions)
 
-Este repo incluye dos workflows que se ejecutan bajo demanda (desde la pestaña
-“Actions” ➜ botón “Run workflow”). Ambos empaquetan la app con PyInstaller y
-suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
+Este repo incluye dos workflows que se ejecutan al publicar una release o de
+forma manual desde Actions. Ambos empaquetan la app con PyInstaller y suben
+los binarios como assets de la release:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
    - Se ejecuta automáticamente al publicar una release y también se puede
      lanzar manualmente desde Actions (opcionalmente indicando un tag).
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
    - Hace checkout del tag de esa release y genera
-     `dist/radioaward_bridge-<tag>.zip` (contiene el .exe).
+     `dist/radioaward_bridge-win-<tag>.zip` (contiene el .exe).
    - Sube el ZIP como asset a la release publicada.
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
@@ -65,13 +65,10 @@ suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
      ejecución manual con el tag deseado.
    - Corre en `macos-latest` con los mismos pasos (PyInstaller + compresión).
    - Usa el tag de la release para compilar y publica
-     `dist/radioaward_bridge-macos-<tag>.zip` en
-     `ghcr.io/<owner>/radioaward-bridge-macos` (incluyendo la etiqueta `latest`).
+     `dist/radioaward_bridge-macos-<tag>.dmg` como asset en la release.
 
 Tras ejecutar cualquiera de los workflows podrás descargar el binario desde la
-sección “Packages” del repositorio (o directamente desde GHCR usando `oras` o
-`ghcr.io/<owner>/<package>:tag`). Ambos siempre generan el paquete tomando la
-última release publicada en GitHub.
+propia página de la release correspondiente.
 
 ## Tests
 

@@ -13,8 +13,7 @@ jobs:
   macos-binary:
     runs-on: macos-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write
 
     steps:
       - name: Checkout
@@ -37,28 +36,22 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile radioaward_bridge.py
 
-      - name: Package artifact
-        run: |
-          cd dist
-          zip -r radioaward_bridge-macos.zip radioaward_bridge
-
-      - name: Version artifact
+      - name: Package DMG
         env:
           VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
         run: |
-          cd dist
-          mv radioaward_bridge-macos.zip "radioaward_bridge-macos-$VERSION.zip"
+          mkdir -p dist/dmg
+          cp dist/radioaward_bridge dist/dmg/radioaward_bridge
+          DMG="dist/radioaward_bridge-macos-$VERSION.dmg"
+          hdiutil create -volname "RadioAward Bridge" -srcfolder dist/dmg -ov -format UDZO "$DMG"
 
-      - name: Install ORAS
-        run: brew install oras
-
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Publish package
+      - name: Upload release asset
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-macos
           VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          oras push "$IMAGE:$VERSION" "dist/radioaward_bridge-macos-$VERSION.zip:application/zip"
-          oras push "$IMAGE:latest" "dist/radioaward_bridge-macos-$VERSION.zip:application/zip"
+          if [ -z "$VERSION" ]; then
+            echo "VERSION no definido." >&2
+            exit 1
+          fi
+          gh release upload "$VERSION" "dist/radioaward_bridge-macos-$VERSION.dmg" --clobber
