@@ -2,6 +2,10 @@ name: Build Windows Binary
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Tag o texto de la versión a empaquetar (ej. v1.2.3)
+        required: true
 
 jobs:
   windows-binary:
@@ -15,17 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Determine latest release tag
-        id: latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tag = (gh release view latest --json tagName --jq '.tagName')
-          if (-not $tag) { throw "No se pudo determinar el tag latest." }
-          git fetch --tags --force
-          git checkout $tag
-          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          ref: ${{ inputs.version }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,7 +38,7 @@ jobs:
       - name: Version artifact
         shell: pwsh
         env:
-          VERSION: ${{ steps.latest.outputs.tag }}
+          VERSION: ${{ inputs.version }}
         run: |
           $src = "dist/radioaward_bridge.exe"
           $dest = "dist/radioaward_bridge-$env:VERSION.exe"
@@ -66,11 +60,13 @@ jobs:
       - name: Publish package
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-windows
-          VERSION: ${{ steps.latest.outputs.tag }}
+          VERSION: ${{ inputs.version }}
         shell: pwsh
         run: |
+          if (-not $env:IMAGE) { throw "IMAGE no definido." }
+          if (-not $env:VERSION) { throw "VERSION no definido." }
           $artifact = "dist/radioaward_bridge-$env:VERSION.exe:application/octet-stream"
-          $ref = "{0}:{1}" -f $env:IMAGE, $env:VERSION
-          $latest = "{0}:latest" -f $env:IMAGE
+          $ref = "${env:IMAGE}:${env:VERSION}"
+          $latest = "${env:IMAGE}:latest"
           oras push $ref $artifact
           oras push $latest $artifact

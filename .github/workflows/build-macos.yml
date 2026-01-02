@@ -2,6 +2,10 @@ name: Build macOS Binary
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Tag o texto de la versión a empaquetar (ej. v1.2.3)
+        required: true
 
 jobs:
   macos-binary:
@@ -15,20 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Determine latest release tag
-        id: latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG=$(gh release view latest --json tagName --jq '.tagName')
-          if [ -z "$TAG" ]; then
-            echo "No se pudo determinar el tag latest" >&2
-            exit 1
-          fi
-          git fetch --tags --force
-          git checkout "$TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          ref: ${{ inputs.version }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,7 +42,7 @@ jobs:
 
       - name: Version artifact
         env:
-          VERSION: ${{ steps.latest.outputs.tag }}
+          VERSION: ${{ inputs.version }}
         run: |
           cd dist
           mv radioaward_bridge-macos.zip "radioaward_bridge-macos-$VERSION.zip"
@@ -65,7 +56,7 @@ jobs:
       - name: Publish package
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-macos
-          VERSION: ${{ steps.latest.outputs.tag }}
+          VERSION: ${{ inputs.version }}
         run: |
           oras push "$IMAGE:$VERSION" "dist/radioaward_bridge-macos-$VERSION.zip:application/zip"
           oras push "$IMAGE:latest" "dist/radioaward_bridge-macos-$VERSION.zip:application/zip"

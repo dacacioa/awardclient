@@ -54,15 +54,15 @@ suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
-   - Al ejecutarlo detecta automáticamente el tag asociado a la última release
-     (`gh release view latest`) y construye exactamente ese código.
+   - Al lanzarlo debes introducir manualmente el texto de la versión/tag que
+     quieres compilar (p.ej. `v1.2.3`); el workflow hace checkout de ese tag.
    - Genera `dist/radioaward_bridge-<tag>.exe` y lo publica directamente (sin ZIP) en
      `ghcr.io/<owner>/radioaward-bridge-windows` con dicha etiqueta (además de `latest`).
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
    - Corre en `macos-latest` con los mismos pasos (PyInstaller + compresión).
-   - También extrae automáticamente el tag de la última release, construye esa
-     versión y publica `dist/radioaward_bridge-macos-<tag>.zip` en
+   - Igual que el de Windows, requiere que indiques manualmente el tag/versión.
+     Con esa referencia hace checkout y publica `dist/radioaward_bridge-macos-<tag>.zip` en
      `ghcr.io/<owner>/radioaward-bridge-macos` (incluyendo la etiqueta `latest`).
 
 Tras ejecutar cualquiera de los workflows podrás descargar el binario desde la
