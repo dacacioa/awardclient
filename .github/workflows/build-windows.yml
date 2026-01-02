@@ -1,11 +1,8 @@
 name: Build Windows Binary
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Tag o texto de la versión a empaquetar (ej. v1.2.3)
-        required: true
+  release:
+    types: [published]
 
 jobs:
   windows-binary:
@@ -18,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.version }}
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,7 +34,7 @@ jobs:
       - name: Version artifact
         shell: pwsh
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ github.event.release.tag_name }}
         run: |
           $src = "dist/radioaward_bridge.exe"
           $dest = "dist/radioaward_bridge-$env:VERSION.exe"
@@ -55,7 +52,7 @@ jobs:
 
       - name: Upload release asset
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ github.event.release.tag_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
