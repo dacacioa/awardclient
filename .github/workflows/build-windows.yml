@@ -28,10 +28,6 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile radioaward_bridge.py
 
-      - name: Package artifact
-        run: |
-          Compress-Archive -Path dist\radioaward_bridge.exe -DestinationPath dist\radioaward_bridge-windows.zip
-
       - name: Install ORAS
         shell: pwsh
         run: |
@@ -51,7 +47,7 @@ jobs:
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('run-{0}', github.run_number) }}
         shell: pwsh
         run: |
-          $artifact = "dist/radioaward_bridge-windows.zip:application/zip"
+          $artifact = "dist/radioaward_bridge.exe:application/octet-stream"
           $ref = "{0}:{1}" -f $env:IMAGE, $env:VERSION
           $latest = "{0}:latest" -f $env:IMAGE
           oras push $ref $artifact
