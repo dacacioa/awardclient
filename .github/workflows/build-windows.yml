@@ -41,6 +41,15 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile radioaward_bridge.py
 
+      - name: Version artifact
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.latest.outputs.tag }}
+        run: |
+          $src = "dist/radioaward_bridge.exe"
+          $dest = "dist/radioaward_bridge-$env:VERSION.exe"
+          Rename-Item -Path $src -NewName (Split-Path $dest -Leaf)
+
       - name: Install ORAS
         shell: pwsh
         run: |
@@ -60,7 +69,7 @@ jobs:
           VERSION: ${{ steps.latest.outputs.tag }}
         shell: pwsh
         run: |
-          $artifact = "dist/radioaward_bridge.exe:application/octet-stream"
+          $artifact = "dist/radioaward_bridge-$env:VERSION.exe:application/octet-stream"
           $ref = "{0}:{1}" -f $env:IMAGE, $env:VERSION
           $latest = "{0}:latest" -f $env:IMAGE
           oras push $ref $artifact

@@ -49,6 +49,13 @@ jobs:
           cd dist
           zip -r radioaward_bridge-macos.zip radioaward_bridge
 
+      - name: Version artifact
+        env:
+          VERSION: ${{ steps.latest.outputs.tag }}
+        run: |
+          cd dist
+          mv radioaward_bridge-macos.zip "radioaward_bridge-macos-$VERSION.zip"
+
       - name: Install ORAS
         run: brew install oras
 
@@ -60,5 +67,5 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-macos
           VERSION: ${{ steps.latest.outputs.tag }}
         run: |
-          oras push "$IMAGE:$VERSION" dist/radioaward_bridge-macos.zip:application/zip
-          oras push "$IMAGE:latest" dist/radioaward_bridge-macos.zip:application/zip
+          oras push "$IMAGE:$VERSION" "dist/radioaward_bridge-macos-$VERSION.zip:application/zip"
+          oras push "$IMAGE:latest" "dist/radioaward_bridge-macos-$VERSION.zip:application/zip"
