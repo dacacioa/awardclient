@@ -13,6 +13,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine latest release tag
+        id: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(gh release view latest --json tagName --jq '.tagName')
+          if [ -z "$TAG" ]; then
+            echo "No se pudo determinar el tag latest" >&2
+            exit 1
+          fi
+          git fetch --tags --force
+          git checkout "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,7 +58,7 @@ jobs:
       - name: Publish package
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-macos
-          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('run-{0}', github.run_number) }}
+          VERSION: ${{ steps.latest.outputs.tag }}
         run: |
           oras push "$IMAGE:$VERSION" dist/radioaward_bridge-macos.zip:application/zip
           oras push "$IMAGE:latest" dist/radioaward_bridge-macos.zip:application/zip

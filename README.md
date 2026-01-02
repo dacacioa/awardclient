@@ -54,24 +54,21 @@ suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
-   - Al lanzar el workflow verás un desplegable con los últimos tags (máx. 20)
-     generados automáticamente; selecciona el que desees empaquetar.
+   - Al ejecutarlo detecta automáticamente el tag asociado a la última release
+     (`gh release view latest`) y construye exactamente ese código.
    - Genera `dist/radioaward_bridge.exe` y lo publica directamente (sin ZIP) en
-     `ghcr.io/<owner>/radioaward-bridge-windows` con la misma etiqueta.
+     `ghcr.io/<owner>/radioaward-bridge-windows` con dicha etiqueta (además de `latest`).
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
-   - Corre en `macos-latest` con los mismos pasos.
-   - Genera `dist/radioaward_bridge`, lo comprime y lo publica en
-     `ghcr.io/<owner>/radioaward-bridge-macos`.
+   - Corre en `macos-latest` con los mismos pasos (PyInstaller + compresión).
+   - También extrae automáticamente el tag de la última release, construye esa
+     versión y publica `dist/radioaward_bridge-macos.zip` en
+     `ghcr.io/<owner>/radioaward-bridge-macos` (incluyendo la etiqueta `latest`).
 
 Tras ejecutar cualquiera de los workflows podrás descargar el binario desde la
 sección “Packages” del repositorio (o directamente desde GHCR usando `oras` o
-`ghcr.io/<owner>/<package>:tag`).
-
-Para mantener actualizado el desplegable de tags existe el workflow
-`Refresh Tag Choices` (`.github/workflows/update-tag-options.yml`), que se
-ejecuta automáticamente al crear nuevos tags (o manualmente) y sincroniza la
-lista en una variable del repositorio.
+`ghcr.io/<owner>/<package>:tag`). Ambos siempre generan el paquete tomando la
+última release publicada en GitHub.
 
 ## Tests
 
