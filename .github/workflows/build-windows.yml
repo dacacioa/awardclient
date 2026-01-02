@@ -44,6 +44,16 @@ jobs:
           $dest = "dist/radioaward_bridge-$env:VERSION.exe"
           Rename-Item -Path $src -NewName (Split-Path $dest -Leaf)
 
+      - name: Package artifact
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $zip = "dist/radioaward_bridge-$env:VERSION.zip"
+          $exe = "dist/radioaward_bridge-$env:VERSION.exe"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path $exe -DestinationPath $zip
+
       - name: Install ORAS
         shell: pwsh
         run: |
@@ -65,7 +75,7 @@ jobs:
         run: |
           if (-not $env:IMAGE) { throw "IMAGE no definido." }
           if (-not $env:VERSION) { throw "VERSION no definido." }
-          $artifact = "dist/radioaward_bridge-$env:VERSION.exe:application/octet-stream"
+          $artifact = "dist/radioaward_bridge-$env:VERSION.zip:application/zip"
           $ref = "${env:IMAGE}:${env:VERSION}"
           $latest = "${env:IMAGE}:latest"
           oras push $ref $artifact

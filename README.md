@@ -56,7 +56,7 @@ suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
    - Al lanzarlo debes introducir manualmente el texto de la versión/tag que
      quieres compilar (p.ej. `v1.2.3`); el workflow hace checkout de ese tag.
-   - Genera `dist/radioaward_bridge-<tag>.exe` y lo publica directamente (sin ZIP) en
+   - Genera `dist/radioaward_bridge-<tag>.zip` (contiene el .exe) y lo publica en
      `ghcr.io/<owner>/radioaward-bridge-windows` con dicha etiqueta (además de `latest`).
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
