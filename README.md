@@ -53,14 +53,16 @@ Este repo incluye dos workflows que se ejecutan bajo demanda (desde la pestaña
 suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
-   - Se ejecuta automáticamente al publicar una release.
+   - Se ejecuta automáticamente al publicar una release y también se puede
+     lanzar manualmente desde Actions (opcionalmente indicando un tag).
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
    - Hace checkout del tag de esa release y genera
      `dist/radioaward_bridge-<tag>.zip` (contiene el .exe).
    - Sube el ZIP como asset a la release publicada.
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
-   - Se ejecuta automáticamente al publicar una release.
+   - Se ejecuta automáticamente al publicar una release y también admite
+     ejecución manual con el tag deseado.
    - Corre en `macos-latest` con los mismos pasos (PyInstaller + compresión).
    - Usa el tag de la release para compilar y publica
      `dist/radioaward_bridge-macos-<tag>.zip` en
