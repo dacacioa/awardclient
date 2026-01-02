@@ -11,8 +11,7 @@ jobs:
   windows-binary:
     runs-on: windows-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write
 
     steps:
       - name: Checkout
@@ -54,29 +53,12 @@ jobs:
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $exe -DestinationPath $zip
 
-      - name: Install ORAS
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $orasVersion = "1.2.0"
-          $zipPath = "$env:RUNNER_TEMP\oras.zip"
-          Invoke-WebRequest -Uri "https://github.com/oras-project/oras/releases/download/v$orasVersion/oras_${orasVersion}_windows_amd64.zip" -OutFile $zipPath
-          Expand-Archive -Path $zipPath -DestinationPath "$env:RUNNER_TEMP\oras"
-          "$env:RUNNER_TEMP\oras" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Publish package
+      - name: Upload release asset
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-windows
           VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          if (-not $env:IMAGE) { throw "IMAGE no definido." }
           if (-not $env:VERSION) { throw "VERSION no definido." }
-          $artifact = "dist/radioaward_bridge-$env:VERSION.zip:application/zip"
-          $ref = "${env:IMAGE}:${env:VERSION}"
-          $latest = "${env:IMAGE}:latest"
-          oras push $ref $artifact
-          oras push $latest $artifact
+          $asset = "dist/radioaward_bridge-$env:VERSION.zip"
+          gh release upload $env:VERSION $asset --clobber
