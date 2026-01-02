@@ -1,0 +1,50 @@
+name: Refresh Tag Choices
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+jobs:
+  refresh-tags:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect recent tags
+        id: tags
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+import json, subprocess
+raw = subprocess.check_output(["git", "tag", "-l", "--sort=-creatordate"]).decode().splitlines()
+tags = [t for t in raw if t][:20]
+if not tags:
+    tags = ["main"]
+print(f"list={json.dumps(tags)}")
+PY
+
+      - name: Update repo variable
+        env:
+          TAGS_JSON: ${{ steps.tags.outputs.list }}
+        run: |
+          echo "Updating dropdown with: $TAGS_JSON"
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/actions/variables/RADIOAWARD_TAGS \
+            -f name='RADIOAWARD_TAGS' \
+            -f value="$TAGS_JSON" \
+          || gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/actions/variables \
+            -f name='RADIOAWARD_TAGS' \
+            -f value="$TAGS_JSON"

@@ -54,8 +54,8 @@ suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
-   - Al lanzar el workflow debes indicar el tag (ej. `v1.0.0`) que deseas
-     empaquetar. El código se chequea exactamente en ese tag.
+   - Al lanzar el workflow verás un desplegable con los últimos tags (máx. 20)
+     generados automáticamente; selecciona el que desees empaquetar.
    - Genera `dist/radioaward_bridge.exe` y lo publica directamente (sin ZIP) en
      `ghcr.io/<owner>/radioaward-bridge-windows` con la misma etiqueta.
 
@@ -67,6 +67,11 @@ suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
 Tras ejecutar cualquiera de los workflows podrás descargar el binario desde la
 sección “Packages” del repositorio (o directamente desde GHCR usando `oras` o
 `ghcr.io/<owner>/<package>:tag`).
+
+Para mantener actualizado el desplegable de tags existe el workflow
+`Refresh Tag Choices` (`.github/workflows/update-tag-options.yml`), que se
+ejecuta automáticamente al crear nuevos tags (o manualmente) y sincroniza la
+lista en una variable del repositorio.
 
 ## Tests
 

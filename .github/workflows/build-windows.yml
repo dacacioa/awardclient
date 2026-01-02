@@ -6,6 +6,8 @@ on:
       tag:
         description: Git tag que se va a empaquetar (ej. v1.0.0)
         required: true
+        type: choice
+        options: ${{ fromJSON(vars.RADIOAWARD_TAGS || '["main"]') }}
 
 jobs:
   windows-binary:
