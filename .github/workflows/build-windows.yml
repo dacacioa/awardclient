@@ -2,6 +2,10 @@ name: Build Windows Binary
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag que se va a empaquetar (ej. v1.0.0)
+        required: true
 
 jobs:
   windows-binary:
@@ -13,6 +17,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,7 +51,7 @@ jobs:
       - name: Publish package
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-windows
-          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('run-{0}', github.run_number) }}
+          VERSION: ${{ inputs.tag }}
         shell: pwsh
         run: |
           $artifact = "dist/radioaward_bridge.exe:application/octet-stream"
