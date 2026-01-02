@@ -43,7 +43,7 @@ jobs:
       - name: Package artifact
         shell: pwsh
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ github.event.release.tag_name }}
         run: |
           $zip = "dist/radioaward_bridge-$env:VERSION.zip"
           $exe = "dist/radioaward_bridge-$env:VERSION.exe"
