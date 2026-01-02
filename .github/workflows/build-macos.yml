@@ -1,0 +1,36 @@
+name: Build macOS Binary
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  macos-binary:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pyinstaller
+
+      - name: Build executable
+        run: |
+          pyinstaller --noconfirm --onefile radioaward_bridge.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: radioaward_bridge-macos
+          path: dist/radioaward_bridge
