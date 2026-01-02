@@ -1,15 +1,14 @@
 name: Build macOS Binary
 
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 jobs:
   macos-binary:
     runs-on: macos-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -29,8 +28,21 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile radioaward_bridge.py
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: radioaward_bridge-macos
-          path: dist/radioaward_bridge
+      - name: Package artifact
+        run: |
+          cd dist
+          zip -r radioaward_bridge-macos.zip radioaward_bridge
+
+      - name: Install ORAS
+        run: brew install oras
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Publish package
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/radioaward-bridge-macos
+          VERSION: v${{ github.run_number }}
+        run: |
+          oras push $IMAGE:$VERSION dist/radioaward_bridge-macos.zip:application/zip
+          oras push $IMAGE:latest dist/radioaward_bridge-macos.zip:application/zip

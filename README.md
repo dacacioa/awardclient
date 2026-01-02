@@ -48,20 +48,23 @@ La aplicación guardará la URL base, API key, perfil de log y puerto UDP en
 
 ## Builds automáticos (GitHub Actions)
 
-Este repo incluye dos workflows:
+Este repo incluye dos workflows que se ejecutan bajo demanda (desde la pestaña
+“Actions” ➜ botón “Run workflow”). Ambos empaquetan la app con PyInstaller y
+suben el ZIP resultante a GitHub Packages (GHCR) como artefacto genérico:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
-   - Genera `dist/radioaward_bridge.exe`.
-   - Publica el artefacto `radioaward_bridge-windows`.
+   - Genera `dist/radioaward_bridge.exe`, lo comprime y lo publica en
+     `ghcr.io/<owner>/radioaward-bridge-windows`.
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
    - Corre en `macos-latest` con los mismos pasos.
-   - Genera `dist/radioaward_bridge`.
-   - Publica el artefacto `radioaward_bridge-macos`.
+   - Genera `dist/radioaward_bridge`, lo comprime y lo publica en
+     `ghcr.io/<owner>/radioaward-bridge-macos`.
 
-Ambos workflows se disparan al hacer push o PR a `main`, o mediante
-`workflow_dispatch`. Puedes descargar los binarios desde la pestaña “Actions”.
+Tras ejecutar cualquiera de los workflows podrás descargar el binario desde la
+sección “Packages” del repositorio (o directamente desde GHCR usando `oras` o
+`ghcr.io/<owner>/<package>:tag`).
 
 ## Tests
 

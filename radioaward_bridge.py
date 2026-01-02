@@ -33,6 +33,11 @@ logging.basicConfig(
 LOGGER = logging.getLogger(__name__)
 
 
+def utc_now() -> dt.datetime:
+    """Return timezone-aware UTC timestamps to avoid datetime warnings."""
+    return dt.datetime.now(dt.timezone.utc)
+
+
 # -- default settings (persisted per user) -------------------------------------
 DEFAULT_SETTINGS = {
     "base_url": "https://RADIOAWARD_HOST",
@@ -453,10 +458,15 @@ class MainWindow:
                 )
                 for item in data.get("diplomas", [])
             ]
-            self.root.after(0, lambda: self._on_login_success(operator, diplomas))
+            self.root.after(
+                0,
+                lambda operator=operator, diplomas=diplomas: self._on_login_success(
+                    operator, diplomas
+                ),
+            )
         except Exception as exc:
             LOGGER.exception("Login failed: %s", exc)
-            self.root.after(0, lambda: self._on_login_error(exc))
+            self.root.after(0, lambda err=exc: self._on_login_error(err))
 
     def _set_login_button_state(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -545,7 +555,7 @@ class MainWindow:
             LOGGER.warning("Incomplete QSO data: %s", qso_fields)
             return
 
-        timestamp = dt.datetime.utcnow().strftime("%H:%M:%S")
+        timestamp = utc_now().strftime("%H:%M:%S")
         if self.debug_var.get():
             self._log(f"[{timestamp}] Request: {json.dumps(payload)}")
         else:
@@ -557,7 +567,7 @@ class MainWindow:
             self.root.after(
                 0,
                 lambda: self.last_success_var.set(
-                    dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                    utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
                 ),
             )
             self.root.after(0, lambda: self.qso_count_var.set(str(self.qso_counter)))
@@ -568,7 +578,7 @@ class MainWindow:
             self.root.after(
                 0,
                 lambda: self.last_error_var.set(
-                    f"{dt.datetime.utcnow().isoformat(timespec='seconds')}Z - {exc}"
+                    f"{utc_now().strftime('%Y-%m-%dT%H:%M:%SZ')} - {exc}"
                 ),
             )
             self._log(f"[{timestamp}] Error: {exc}")
@@ -626,7 +636,7 @@ class MainWindow:
 
     @staticmethod
     def _build_qso_datetime(qso_date: Optional[str], time_on: Optional[str]) -> str:
-        now = dt.datetime.utcnow()
+        now = utc_now()
         if qso_date and time_on and len(qso_date) == 8 and len(time_on) >= 6:
             try:
                 formatted = dt.datetime.strptime(
@@ -747,7 +757,7 @@ class MainWindow:
 
     def _write_log(self, message: str) -> None:
         self.log_text.configure(state="normal")
-        timestamp = dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = utc_now().strftime("%Y-%m-%d %H:%M:%S")
         self.log_text.insert("end", f"{timestamp} - {message}\n")
         self.log_text.configure(state="disabled")
         self.log_text.see("end")
