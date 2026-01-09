@@ -732,10 +732,38 @@ class MainWindow:
     def _normalize_frequency(value: Optional[str]) -> Optional[str]:
         if not value:
             return None
-        freq = str(value).strip()
-        if not freq:
+        raw = str(value).strip()
+        if not raw:
             return None
-        return freq[:32]
+
+        def parse_to_mhz(text: str) -> Optional[float]:
+            cleaned = text.strip()
+            if not cleaned:
+                return None
+            if "." in cleaned and "," in cleaned:
+                number = cleaned.replace(".", "").replace(",", ".")
+            elif "," in cleaned:
+                number = cleaned.replace(",", ".")
+            else:
+                number = cleaned
+            try:
+                numeric = float(number)
+            except ValueError:
+                return None
+            if numeric >= 10_000_000:
+                return numeric / 1_000_000
+            if numeric >= 1_000_000:
+                return numeric / 100_000
+            if numeric >= 1_000:
+                return numeric / 1_000
+            return numeric
+
+        mhz = parse_to_mhz(raw)
+        if mhz is None:
+            return None
+
+        formatted = f"{mhz:.6f}".rstrip("0").rstrip(".")
+        return formatted[:32]
 
     @staticmethod
     def _format_qso_summary(payload: Dict[str, Any]) -> str:
