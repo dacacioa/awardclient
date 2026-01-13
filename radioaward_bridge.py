@@ -162,11 +162,13 @@ class UdpListener:
         callback: Callable[[Dict[str, str]], None],
         error_callback: Optional[Callable[[str], None]] = None,
         log_callback: Optional[Callable[[str], None]] = None,
+        parse_func: Optional[Callable[[str], Dict[str, str]]] = None,
     ) -> None:
         self.port = port
         self.callback = callback
         self.error_callback = error_callback
         self.log_callback = log_callback
+        self.parse_func = parse_func
         self._socket: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
@@ -220,7 +222,8 @@ class UdpListener:
             LOGGER.debug("Datagram received: %s", payload)
             if self.log_callback:
                 self.log_callback(f"UDP recibido: {payload}")
-            parsed = self._parse_datagram(payload)
+            parser = self.parse_func or self._parse_datagram
+            parsed = parser(payload)
             if parsed and parsed.get("CALL", "").strip():
                 self.callback(parsed)
 
@@ -350,12 +353,13 @@ class MainWindow:
         ttk.Label(login_frame, text="Log:").grid(row=2, column=0, sticky="w", pady=(4, 0))
         self.log_profile_combo = ttk.Combobox(
             login_frame,
-            values=["N1MM"],
+            values=["N1MM", "MacLoggerDX"],
             state="readonly",
             textvariable=self.log_profile,
         )
         self.log_profile_combo.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(4, 0))
         self.log_profile_combo.set(self.log_profile.get())
+        self.log_profile_combo.bind("<<ComboboxSelected>>", self._on_log_profile_changed)
 
         # UDP frame
         udp_frame = ttk.LabelFrame(self.root, text="Pasarela UDP")
@@ -506,6 +510,12 @@ class MainWindow:
             self.selected_diploma_id = self.diplomas[idx].id
         self._refresh_capture_button_state()
 
+    def _on_log_profile_changed(self, _event: Any) -> None:
+        if self.udp_listener and self.udp_listener.is_running():
+            self.udp_listener.stop()
+            self.udp_listener = None
+            self._start_udp_listener(self.udp_port_var.get())
+
     def _refresh_capture_button_state(self) -> None:
         running = bool(self.udp_listener and self.udp_listener.is_running())
         self.capture_button["state"] = "normal"
@@ -526,6 +536,7 @@ class MainWindow:
             self._handle_incoming_qso,
             error_callback=self._handle_udp_error,
             log_callback=lambda msg: self._log(msg, debug_only=True),
+            parse_func=self._get_parser_for_profile(),
         )
         self.udp_listener.start()
         self._refresh_capture_button_state()
@@ -764,6 +775,50 @@ class MainWindow:
 
         formatted = f"{mhz:.6f}".rstrip("0").rstrip(".")
         return formatted[:32]
+
+    def _get_parser_for_profile(self) -> Callable[[str], Dict[str, str]]:
+        profile = self.log_profile.get().strip().lower()
+        if profile == "macloggerdx":
+            return self._parse_macloggerdx
+        return UdpListener._parse_datagram
+
+    @staticmethod
+    def _parse_macloggerdx(text: str) -> Dict[str, str]:
+        content = text.strip()
+        if not content:
+            return {}
+
+        if "[" in content and "]" in content:
+            start = content.find("[")
+            end = content.rfind("]")
+            if end > start:
+                content = content[start + 1 : end]
+
+        if ":" in content:
+            content = content.split(":", 1)[1].strip()
+
+        fields: Dict[str, str] = {}
+        for part in content.split(","):
+            chunk = part.strip()
+            if not chunk or ":" not in chunk:
+                continue
+            key, value = chunk.split(":", 1)
+            key_up = key.strip().upper()
+            val = value.strip()
+            if not key_up:
+                continue
+
+            if key_up in {"RXMHZ", "RXFREQ"}:
+                fields["RXFREQ"] = val
+            elif key_up in {"TXMHZ", "TXFREQ"}:
+                fields["TXFREQ"] = val
+            elif key_up == "DXCC_NUM":
+                fields["DXCC"] = val
+            elif key_up == "DXCC_STRING":
+                fields["COUNTRY"] = val
+            else:
+                fields[key_up] = val
+        return fields
 
     @staticmethod
     def _format_qso_summary(payload: Dict[str, Any]) -> str:
