@@ -622,7 +622,8 @@ class MainWindow:
             payload["mode"] = mode
 
         freq_value = self._normalize_frequency(
-            data.get("FREQ") or data.get("RXFREQ") or data.get("TXFREQ")
+            data.get("FREQ") or data.get("RXFREQ") or data.get("TXFREQ"),
+            band_hint=band_value,
         )
         if freq_value:
             payload["frequency"] = freq_value
@@ -740,14 +741,14 @@ class MainWindow:
         return normalized if normalized in allowed else None
 
     @staticmethod
-    def _normalize_frequency(value: Optional[str]) -> Optional[str]:
+    def _normalize_frequency(value: Optional[str], band_hint: Optional[str] = None) -> Optional[str]:
         if not value:
             return None
         raw = str(value).strip()
         if not raw:
             return None
 
-        def parse_to_mhz(text: str) -> Optional[float]:
+        def parse_numeric(text: str) -> Optional[float]:
             cleaned = text.strip()
             if not cleaned:
                 return None
@@ -758,22 +759,47 @@ class MainWindow:
             else:
                 number = cleaned
             try:
-                numeric = float(number)
+                return float(number)
             except ValueError:
                 return None
-            if numeric >= 10_000_000:
-                return numeric / 1_000_000
-            if numeric >= 1_000_000:
-                return numeric / 100_000
-            if numeric >= 1_000:
-                return numeric / 1_000
-            return numeric
 
-        mhz = parse_to_mhz(raw)
-        if mhz is None:
+        numeric = parse_numeric(raw)
+        if numeric is None:
             return None
 
-        formatted = f"{mhz:.6f}".rstrip("0").rstrip(".")
+        band_ranges = {
+            "10m": (28, 30),
+            "12m": (24, 25),
+            "15m": (21, 22),
+            "17m": (18, 19),
+            "20m": (14, 15),
+            "30m": (10, 11),
+            "40m": (7, 8),
+            "80m": (3, 4),
+        }
+
+        candidates: List[float] = []
+        for scale in (1, 10, 100, 1_000, 10_000, 100_000, 1_000_000):
+            candidates.append(numeric / scale)
+
+        chosen: Optional[float] = None
+        band_lower, band_upper = band_ranges.get(band_hint or "", (None, None))
+        if band_lower is not None and band_upper is not None:
+            in_range = [
+                c for c in candidates if band_lower <= c < band_upper
+            ]
+            if in_range:
+                mid = (band_lower + band_upper) / 2
+                chosen = min(in_range, key=lambda c: abs(c - mid))
+
+        if chosen is None:
+            plausible = [c for c in candidates if 0.1 <= c <= 1500]
+            if plausible:
+                chosen = plausible[0]
+            else:
+                return None
+
+        formatted = f"{chosen:.6f}".rstrip("0").rstrip(".")
         return formatted[:32]
 
     def _get_parser_for_profile(self) -> Callable[[str], Dict[str, str]]:
