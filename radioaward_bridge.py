@@ -691,6 +691,21 @@ class MainWindow:
                     return label
             return None
 
+        def parse_freq(text: str) -> Optional[float]:
+            cleaned = text.strip()
+            if not cleaned:
+                return None
+            if "." in cleaned and "," in cleaned:
+                number = cleaned.replace(".", "").replace(",", ".")
+            elif "," in cleaned:
+                number = cleaned.replace(",", ".")
+            else:
+                number = cleaned
+            try:
+                return float(number)
+            except ValueError:
+                return None
+
         value = (band or "").strip()
         if value:
             lowercase = value.lower()
@@ -713,11 +728,14 @@ class MainWindow:
                 if result:
                     return result
             except ValueError:
-                pass
+                    pass
 
         if freq:
             try:
-                freq_val = float(freq)
+                parsed_freq = parse_freq(freq)
+                if parsed_freq is None:
+                    return None
+                freq_val = parsed_freq
                 for scale in (1_000_000, 100_000, 10_000, 1_000, 100, 10, 1):
                     mhz = freq_val / scale
                     result = from_mhz(mhz)
@@ -799,7 +817,8 @@ class MainWindow:
             else:
                 return None
 
-        formatted = f"{chosen:.6f}".rstrip("0").rstrip(".")
+        khz = chosen * 1000
+        formatted = f"{khz:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         return formatted[:32]
 
     def _get_parser_for_profile(self) -> Callable[[str], Dict[str, str]]:
@@ -820,8 +839,15 @@ class MainWindow:
             if end > start:
                 content = content[start + 1 : end]
 
+        report_type = ""
         if ":" in content:
-            content = content.split(":", 1)[1].strip()
+            prefix, rest = content.split(":", 1)
+            report_type = prefix.strip().lower()
+            content = rest.strip()
+
+        # Only process QSO entries from MacLoggerDX; ignore Spot/Lookup/etc.
+        if report_type and report_type != "log report":
+            return {}
 
         fields: Dict[str, str] = {}
         for part in content.split(","):
