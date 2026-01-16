@@ -833,6 +833,10 @@ class MainWindow:
         if not content:
             return {}
 
+        # MacLoggerDX emits many report types; only Log Report represents a QSO.
+        if "log report" not in content.lower():
+            return {}
+
         if "[" in content and "]" in content:
             start = content.find("[")
             end = content.rfind("]")
