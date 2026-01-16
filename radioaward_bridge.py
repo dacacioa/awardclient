@@ -288,6 +288,9 @@ class MainWindow:
         self.is_logged_in = False
         self.log_profile = tk.StringVar(value=settings.get("log_profile", "N1MM"))
         self.debug_var = tk.BooleanVar(value=settings.get("debug", False))
+        self._dedupe_lock = threading.Lock()
+        self._last_sent_signature: Optional[tuple] = None
+        self._last_attempt_signature: Optional[tuple] = None
 
         self._build_ui(settings)
         self._update_login_state(False, "Desconectado")
@@ -567,6 +570,15 @@ class MainWindow:
             return
 
         timestamp = utc_now().strftime("%H:%M:%S")
+        signature = self._build_dedupe_signature(payload)
+        with self._dedupe_lock:
+            if signature == self._last_sent_signature or signature == self._last_attempt_signature:
+                self._log(
+                    f"[{timestamp}] QSO duplicado ignorado: {self._format_qso_summary(payload)}"
+                )
+                return
+            self._last_attempt_signature = signature
+
         if self.debug_var.get():
             self._log(f"[{timestamp}] Request: {json.dumps(payload)}")
         else:
@@ -584,6 +596,10 @@ class MainWindow:
             self.root.after(0, lambda: self.qso_count_var.set(str(self.qso_counter)))
             if self.debug_var.get():
                 self._log(f"[{timestamp}] Response: {response}")
+            with self._dedupe_lock:
+                self._last_sent_signature = signature
+                if self._last_attempt_signature == signature:
+                    self._last_attempt_signature = None
         except Exception as exc:
             LOGGER.exception("Error sending contact: %s", exc)
             self.root.after(
@@ -593,6 +609,9 @@ class MainWindow:
                 ),
             )
             self._log(f"[{timestamp}] Error: {exc}")
+            with self._dedupe_lock:
+                if self._last_attempt_signature == signature:
+                    self._last_attempt_signature = None
 
     def _build_contact_payload(self, data: Dict[str, str]) -> Optional[Dict[str, Any]]:
         if not (self.api_client.api_key and self.selected_diploma_id):
@@ -638,6 +657,29 @@ class MainWindow:
 
         return payload
 
+    def _build_dedupe_signature(self, payload: Dict[str, Any]) -> tuple:
+        keys = (
+            "diplomaId",
+            "callsign",
+            "qsoDateTime",
+            "band",
+            "mode",
+            "frequency",
+            "country",
+            "dxcc",
+        )
+        signature: List[str] = []
+        for key in keys:
+            value = payload.get(key)
+            if value is None:
+                cleaned = ""
+            else:
+                cleaned = str(value).strip()
+            if key in {"callsign", "band", "mode", "country"}:
+                cleaned = cleaned.upper()
+            signature.append(cleaned)
+        return tuple(signature)
+
     def _extract_qso_datetime(self, data: Dict[str, str]) -> str:
         timestamp_field = data.get("TIMESTAMP") or data.get("TIME")
         if timestamp_field:
@@ -662,9 +704,13 @@ class MainWindow:
     @staticmethod
     def _parse_timestamp(timestamp: str) -> Optional[str]:
         clean = timestamp.strip()
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        for fmt in ("%Y-%m-%d %H:%M:%S %z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
             try:
                 parsed = dt.datetime.strptime(clean, fmt)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=dt.timezone.utc)
+                else:
+                    parsed = parsed.astimezone(dt.timezone.utc)
                 return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
             except ValueError:
                 continue
@@ -872,6 +918,8 @@ class MainWindow:
                 fields["DXCC"] = val
             elif key_up == "DXCC_STRING":
                 fields["COUNTRY"] = val
+            elif key_up in {"LOGGED_TIME", "LOGGEDTIME"}:
+                fields["TIMESTAMP"] = val
             else:
                 fields[key_up] = val
         return fields
