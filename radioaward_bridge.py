@@ -98,6 +98,8 @@ class ApiClient:
         key = (api_key or self._api_key or "").strip()
         if not key:
             raise ValueError("La API key es obligatoria.")
+        if len(key) < 8:
+            raise ValueError("La API key debe tener al menos 8 caracteres.")
 
         payload = {"apiKey": key}
         url = f"{self._base_url}/api/public/operators/login"
@@ -446,6 +448,9 @@ class MainWindow:
         if not api_key:
             messagebox.showwarning("Login", "Introduce una API key.")
             return
+        if len(api_key) < 8:
+            messagebox.showwarning("Login", "La API key debe tener al menos 8 caracteres.")
+            return
 
         self.api_client.set_base_url(base_url)
         self.api_client.set_api_key(api_key)
@@ -614,21 +619,24 @@ class MainWindow:
                     self._last_attempt_signature = None
 
     def _build_contact_payload(self, data: Dict[str, str]) -> Optional[Dict[str, Any]]:
-        if not (self.api_client.api_key and self.selected_diploma_id):
+        api_key = (self.api_client.api_key or "").strip()
+        diploma_id = (self.selected_diploma_id or "").strip()
+        if not api_key or len(api_key) < 8 or not diploma_id:
             return None
 
         call = data.get("CALL", "").strip().upper()
-        if not call:
+        if not call or len(call) < 2:
             return None
 
         qso_dt = self._extract_qso_datetime(data)
 
         payload: Dict[str, Any] = {
-            "apiKey": self.api_client.api_key,
-            "diplomaId": self.selected_diploma_id,
+            "apiKey": api_key,
+            "diplomaId": diploma_id,
             "callsign": call,
-            "qsoDateTime": qso_dt,
         }
+        if qso_dt:
+            payload["qsoDateTime"] = qso_dt
 
         band_value = self._normalize_band(
             data.get("BAND"),
@@ -649,11 +657,15 @@ class MainWindow:
 
         country_value = data.get("COUNTRY") or data.get("COUNTRYPREFIX")
         if country_value:
-            payload["country"] = country_value
+            country_clean = str(country_value).strip()
+            if country_clean:
+                payload["country"] = country_clean[:120]
 
         dxcc_value = data.get("DXCC")
-        if dxcc_value:
-            payload["dxcc"] = dxcc_value
+        if dxcc_value is not None:
+            dxcc_clean = str(dxcc_value).strip()
+            if dxcc_clean:
+                payload["dxcc"] = dxcc_clean[:16]
 
         return payload
 
@@ -680,7 +692,7 @@ class MainWindow:
             signature.append(cleaned)
         return tuple(signature)
 
-    def _extract_qso_datetime(self, data: Dict[str, str]) -> str:
+    def _extract_qso_datetime(self, data: Dict[str, str]) -> Optional[str]:
         timestamp_field = data.get("TIMESTAMP") or data.get("TIME")
         if timestamp_field:
             iso_ts = self._parse_timestamp(timestamp_field)
@@ -689,8 +701,7 @@ class MainWindow:
         return self._build_qso_datetime(data.get("QSO_DATE"), data.get("TIME_ON"))
 
     @staticmethod
-    def _build_qso_datetime(qso_date: Optional[str], time_on: Optional[str]) -> str:
-        now = utc_now()
+    def _build_qso_datetime(qso_date: Optional[str], time_on: Optional[str]) -> Optional[str]:
         if qso_date and time_on and len(qso_date) == 8 and len(time_on) >= 6:
             try:
                 formatted = dt.datetime.strptime(
@@ -699,12 +710,36 @@ class MainWindow:
                 return formatted.strftime("%Y-%m-%dT%H:%M:%SZ")
             except ValueError:
                 LOGGER.warning("Invalid date/time from N1MM: %s %s", qso_date, time_on)
-        return now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return None
 
     @staticmethod
     def _parse_timestamp(timestamp: str) -> Optional[str]:
         clean = timestamp.strip()
-        for fmt in ("%Y-%m-%d %H:%M:%S %z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+
+        # Try ISO parser first to support common forms with/without timezone and ms.
+        try:
+            iso_candidate = clean
+            if iso_candidate.endswith("Z"):
+                iso_candidate = iso_candidate[:-1] + "+00:00"
+            parsed = dt.datetime.fromisoformat(iso_candidate)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=dt.timezone.utc)
+            else:
+                parsed = parsed.astimezone(dt.timezone.utc)
+            return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            pass
+
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S %z",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S.%fZ",
+        ):
             try:
                 parsed = dt.datetime.strptime(clean, fmt)
                 if parsed.tzinfo is None:
@@ -719,10 +754,31 @@ class MainWindow:
 
     @staticmethod
     def _normalize_band(band: Optional[str], freq: Optional[str]) -> Optional[str]:
-        allowed = {"10m", "12m", "15m", "17m", "20m", "30m", "40m", "80m"}
+        allowed = {
+            "13cm",
+            "23cm",
+            "70cm",
+            "2m",
+            "6m",
+            "10m",
+            "12m",
+            "15m",
+            "17m",
+            "20m",
+            "30m",
+            "40m",
+            "60m",
+            "80m",
+            "160m",
+        }
 
         def from_mhz(value: float) -> Optional[str]:
             ranges = [
+                (2300, 2450, "13cm"),
+                (1240, 1300, "23cm"),
+                (420, 450, "70cm"),
+                (144, 148, "2m"),
+                (50, 54, "6m"),
                 (28, 30, "10m"),
                 (24, 25, "12m"),
                 (21, 22, "15m"),
@@ -730,7 +786,9 @@ class MainWindow:
                 (14, 15, "20m"),
                 (10, 11, "30m"),
                 (7, 8, "40m"),
+                (5, 6, "60m"),
                 (3, 4, "80m"),
+                (1.8, 2.1, "160m"),
             ]
             for low, high, label in ranges:
                 if low <= value < high:
@@ -754,7 +812,7 @@ class MainWindow:
 
         value = (band or "").strip()
         if value:
-            lowercase = value.lower()
+            lowercase = value.lower().replace(" ", "")
             if lowercase in allowed:
                 return lowercase
             if lowercase.endswith("m"):
@@ -782,7 +840,7 @@ class MainWindow:
                 if parsed_freq is None:
                     return None
                 freq_val = parsed_freq
-                for scale in (1_000_000, 100_000, 10_000, 1_000, 100, 10, 1):
+                for scale in (1, 1_000, 1_000_000, 10, 100, 10_000, 100_000):
                     mhz = freq_val / scale
                     result = from_mhz(mhz)
                     if result:
@@ -801,7 +859,7 @@ class MainWindow:
             "LSB": "SSB",
         }
         normalized = mapped.get(normalized, normalized)
-        allowed = {"SSB", "CW", "FT8", "FT4", "RTTY", "SSTV"}
+        allowed = {"SSB", "CW", "FT8", "FT4", "RTTY", "SSTV", "DIGITALVOICE", "FM"}
         return normalized if normalized in allowed else None
 
     @staticmethod
@@ -832,6 +890,11 @@ class MainWindow:
             return None
 
         band_ranges = {
+            "13cm": (2300, 2450),
+            "23cm": (1240, 1300),
+            "70cm": (420, 450),
+            "2m": (144, 148),
+            "6m": (50, 54),
             "10m": (28, 30),
             "12m": (24, 25),
             "15m": (21, 22),
@@ -839,11 +902,13 @@ class MainWindow:
             "20m": (14, 15),
             "30m": (10, 11),
             "40m": (7, 8),
+            "60m": (5, 6),
             "80m": (3, 4),
+            "160m": (1.8, 2.1),
         }
 
         candidates: List[float] = []
-        for scale in (1, 10, 100, 1_000, 10_000, 100_000, 1_000_000):
+        for scale in (1, 1_000, 1_000_000, 10, 100, 10_000, 100_000):
             candidates.append(numeric / scale)
 
         chosen: Optional[float] = None
@@ -857,7 +922,16 @@ class MainWindow:
                 chosen = min(in_range, key=lambda c: abs(c - mid))
 
         if chosen is None:
-            plausible = [c for c in candidates if 0.1 <= c <= 1500]
+            in_any_band = [
+                c
+                for c in candidates
+                if any(low <= c < high for low, high in band_ranges.values())
+            ]
+            if in_any_band:
+                chosen = in_any_band[0]
+
+        if chosen is None:
+            plausible = [c for c in candidates if 0.1 <= c <= 2500]
             if plausible:
                 chosen = plausible[0]
             else:
