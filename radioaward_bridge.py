@@ -40,7 +40,7 @@ def utc_now() -> dt.datetime:
 
 # -- default settings (persisted per user) -------------------------------------
 DEFAULT_SETTINGS = {
-    "base_url": "https://RADIOAWARD_HOST",
+    "base_url": "https://hamactivityback.davidacacio.com/",
     "api_key": "",
     "udp_port": 9091,
     "log_profile": "N1MM",
@@ -59,6 +59,8 @@ class SettingsManager:
         if self.path.exists():
             try:
                 data = json.loads(self.path.read_text(encoding="utf-8"))
+                if data.get("base_url") == "https://RADIOAWARD_HOST":
+                    data["base_url"] = DEFAULT_SETTINGS["base_url"]
                 LOGGER.debug("Loaded settings from %s", self.path)
                 return {**DEFAULT_SETTINGS, **data}
             except Exception as exc:  # pragma: no cover - defensive
