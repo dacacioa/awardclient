@@ -1,0 +1,60 @@
+name: Build Installation PDF
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Tag/release a compilar (ej. v1.2.3). Si se deja vacio usa el tag del evento.
+        required: false
+
+jobs:
+  install-pdf:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
+
+      - name: Install PDF dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc wkhtmltopdf
+
+      - name: Generate installation PDF
+        env:
+          VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
+        run: |
+          mkdir -p dist
+          pandoc INSTALL.md \
+            --from gfm \
+            --standalone \
+            --resource-path=. \
+            --pdf-engine=wkhtmltopdf \
+            --pdf-engine-opt=--enable-local-file-access \
+            -o "dist/hamactivity_bridge-install-$VERSION.pdf"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        env:
+          VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
+        with:
+          name: hamactivity_bridge-install-${{ env.VERSION }}
+          path: dist/hamactivity_bridge-install-${{ env.VERSION }}.pdf
+
+      - name: Upload release asset
+        env:
+          VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$VERSION" ]; then
+            echo "VERSION no definido." >&2
+            exit 1
+          fi
+          gh release upload "$VERSION" "dist/hamactivity_bridge-install-$VERSION.pdf" --clobber
