@@ -28,7 +28,8 @@ Feu doble clic sobre l'arxiu descarregat i extreieu-ne el contingut a l'escripto
 
 ## 3. Executar HamActivity Bridge
 
-Obriu l'executable inclòs dins del paquet extret. Si Windows mostra algun avís de seguretat, confirmeu-ne l'execució.
+Obriu l'executable inclòs dins del paquet extret. Si Windows mostra algun avís de seguretat, confirmeu-ne l'execució (pulseu `Mas informacion` -> `Ejecutar de todas formas`)
+![alt text](img/3.png)
 
 ## 4. Permetre l'accés al tallafoc
 
