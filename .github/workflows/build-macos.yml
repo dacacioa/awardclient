@@ -34,16 +34,16 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --noconfirm --onefile radioaward_bridge.py
+          pyinstaller --noconfirm --onefile --name hamactivity_bridge radioaward_bridge.py
 
       - name: Package DMG
         env:
           VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
         run: |
           mkdir -p dist/dmg
-          cp dist/radioaward_bridge dist/dmg/radioaward_bridge
-          DMG="dist/radioaward_bridge-macos-$VERSION.dmg"
-          hdiutil create -volname "RadioAward Bridge" -srcfolder dist/dmg -ov -format UDZO "$DMG"
+          cp dist/hamactivity_bridge dist/dmg/hamactivity_bridge
+          DMG="dist/hamactivity_bridge-macos-$VERSION.dmg"
+          hdiutil create -volname "HamActivity Bridge" -srcfolder dist/dmg -ov -format UDZO "$DMG"
 
       - name: Upload release asset
         env:
@@ -54,4 +54,4 @@ jobs:
             echo "VERSION no definido." >&2
             exit 1
           fi
-          gh release upload "$VERSION" "dist/radioaward_bridge-macos-$VERSION.dmg" --clobber
+          gh release upload "$VERSION" "dist/hamactivity_bridge-macos-$VERSION.dmg" --clobber

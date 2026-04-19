@@ -1,13 +1,13 @@
-# RadioAward Bridge
+# HamActivity Bridge
 
 Pasarela de escritorio escrita en Python/Tkinter que toma QSOs enviados por
-N1MM vía UDP y los publica en la API pública de RadioAward.
+N1MM vía UDP y los publica en la API pública de HamActivity.
 
 ## Requisitos
 
 - Python 3.12+
 - Dependencias Python: `requests`.
-- Sistema operativo: Windows o macOS (testeado con Tkinter estándar).
+- Sistema operativo: Windows, macOS o Linux (Tkinter estándar).
 
 ## Instalación rápida
 
@@ -32,7 +32,7 @@ python radioaward_bridge.py
 ```
 
 La aplicación guardará la URL base, API key, perfil de log y puerto UDP en
-`~/.radioaward_bridge_settings.json`.
+`~/.hamactivity_bridge_settings.json`.
 
 ### Flujo básico
 
@@ -48,8 +48,8 @@ La aplicación guardará la URL base, API key, perfil de log y puerto UDP en
 
 ## Builds automáticos (GitHub Actions)
 
-Este repo incluye dos workflows que se ejecutan al publicar una release o de
-forma manual desde Actions. Ambos empaquetan la app con PyInstaller y suben
+Este repo incluye tres workflows que se ejecutan al publicar una release o de
+forma manual desde Actions. Todos empaquetan la app con PyInstaller y suben
 los binarios como assets de la release:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
@@ -57,7 +57,7 @@ los binarios como assets de la release:
      lanzar manualmente desde Actions (opcionalmente indicando un tag).
    - Corre en `windows-latest`, instala Python 3.12, `requests` y `pyinstaller`.
    - Hace checkout del tag de esa release y genera
-     `dist/radioaward_bridge-win-<tag>.zip` (contiene el .exe).
+     `dist/hamactivity_bridge-win-<tag>.zip` (contiene el .exe).
    - Sube el ZIP como asset a la release publicada.
 
 2. **Build macOS Binary** (`.github/workflows/build-macos.yml`):
@@ -65,7 +65,15 @@ los binarios como assets de la release:
      ejecución manual con el tag deseado.
    - Corre en `macos-latest` con los mismos pasos (PyInstaller + compresión).
    - Usa el tag de la release para compilar y publica
-     `dist/radioaward_bridge-macos-<tag>.dmg` como asset en la release.
+     `dist/hamactivity_bridge-macos-<tag>.dmg` como asset en la release.
+
+3. **Build Linux Binary** (`.github/workflows/build-linux.yml`):
+   - Se ejecuta automáticamente al publicar una release y también admite
+     ejecución manual con el tag deseado.
+   - Corre en `ubuntu-latest`, instala Python 3.12, `python3-tk`, `requests`
+     y `pyinstaller`.
+   - Usa el tag de la release para compilar y publica
+     `dist/hamactivity_bridge-linux-<tag>.tar.gz` como asset en la release.
 
 Tras ejecutar cualquiera de los workflows podrás descargar el binario desde la
 propia página de la release correspondiente.

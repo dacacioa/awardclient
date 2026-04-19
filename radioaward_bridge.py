@@ -4,7 +4,7 @@ README
 ------
 1) Requiere Python 3.12+ y la libreria requests: `pip install requests`.
 2) Ejecute `python radioaward_bridge.py` (opcionalmente cree un venv antes).
-3) La app almacena la URL base, API key y puerto UDP en un JSON dentro de la
+3) HamActivity Bridge almacena la URL base, API key y puerto UDP en un JSON dentro de la
    carpeta del usuario, por lo que no necesita variables de entorno adicionales.
 """
 
@@ -52,16 +52,18 @@ class SettingsManager:
     """Persist GUI preferences in a JSON file under the user profile."""
 
     def __init__(self, filename: Optional[Path] = None) -> None:
-        config_name = filename or (Path.home() / ".radioaward_bridge_settings.json")
+        config_name = filename or (Path.home() / ".hamactivity_bridge_settings.json")
         self.path = config_name
+        self.legacy_path = Path.home() / ".radioaward_bridge_settings.json"
 
     def load(self) -> Dict[str, Any]:
-        if self.path.exists():
+        source_path = self.path if self.path.exists() else self.legacy_path
+        if source_path.exists():
             try:
-                data = json.loads(self.path.read_text(encoding="utf-8"))
+                data = json.loads(source_path.read_text(encoding="utf-8"))
                 if data.get("base_url") == "https://RADIOAWARD_HOST":
                     data["base_url"] = DEFAULT_SETTINGS["base_url"]
-                LOGGER.debug("Loaded settings from %s", self.path)
+                LOGGER.debug("Loaded settings from %s", source_path)
                 return {**DEFAULT_SETTINGS, **data}
             except Exception as exc:  # pragma: no cover - defensive
                 LOGGER.error("Failed to load settings: %s", exc)
@@ -77,7 +79,7 @@ class SettingsManager:
 
 
 class ApiClient:
-    """Thin wrapper around the RadioAward REST API."""
+    """Thin wrapper around the HamActivity REST API."""
 
     def __init__(self, base_url: str, api_key: str = "") -> None:
         self._base_url = base_url.rstrip("/")
@@ -280,7 +282,7 @@ class MainWindow:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("RadioAward Bridge para N1MM")
+        self.root.title("HamActivity Bridge para N1MM")
 
         self.settings_manager = SettingsManager()
         settings = self.settings_manager.load()
@@ -337,50 +339,44 @@ class MainWindow:
         # Login frame
         login_frame = ttk.LabelFrame(self.root, text="Operador")
         login_frame.grid(row=1, column=0, sticky="ew", **padding)
-        login_frame.columnconfigure(1, weight=1)
+        login_frame.columnconfigure(2, weight=1)
+        login_frame.columnconfigure(3, weight=1)
 
         self.login_status_label = tk.Label(
             login_frame, text="Estado: Desconocido", bg="orange", fg="white"
         )
-        self.login_status_label.grid(row=0, column=0, columnspan=3, sticky="ew", pady=2)
+        self.login_status_label.grid(row=0, column=0, columnspan=4, sticky="ew", pady=2)
 
         self.login_button = ttk.Button(
-            login_frame, text="Login", command=self.handle_login_logout
+            login_frame, text="Login", command=self.handle_login_logout, width=12
         )
-        self.login_button.grid(row=1, column=0, padx=4, sticky="w")
-
-        ttk.Label(login_frame, text="Diploma:").grid(row=1, column=1, sticky="e")
-        self.diplomas_var = tk.StringVar()
-        self.diploma_combo = ttk.Combobox(
-            login_frame, textvariable=self.diplomas_var, state="readonly"
+        self.login_button.grid(
+            row=1, column=0, rowspan=2, padx=(4, 8), pady=(2, 0), ipadx=8, ipady=6, sticky="nsw"
         )
-        self.diploma_combo.grid(row=1, column=2, sticky="ew")
-        self.diploma_combo.bind("<<ComboboxSelected>>", self._on_diploma_selected)
 
-        ttk.Label(login_frame, text="Log:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ttk.Label(login_frame, text="Log:").grid(row=1, column=1, sticky="e")
         self.log_profile_combo = ttk.Combobox(
             login_frame,
             values=["N1MM", "MacLoggerDX"],
             state="readonly",
             textvariable=self.log_profile,
+            width=16,
         )
-        self.log_profile_combo.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(4, 0))
+        self.log_profile_combo.grid(row=1, column=2, sticky="w")
         self.log_profile_combo.set(self.log_profile.get())
         self.log_profile_combo.bind("<<ComboboxSelected>>", self._on_log_profile_changed)
 
-        # UDP frame
-        udp_frame = ttk.LabelFrame(self.root, text="Pasarela UDP")
-        udp_frame.grid(row=2, column=0, sticky="ew", **padding)
-        udp_frame.columnconfigure(0, weight=1)
-
-        self.capture_button = ttk.Button(
-            udp_frame, text="Iniciar captura", command=self.toggle_capture, state="disabled"
+        ttk.Label(login_frame, text="Diploma:").grid(row=2, column=1, sticky="e", pady=(4, 0))
+        self.diplomas_var = tk.StringVar()
+        self.diploma_combo = ttk.Combobox(
+            login_frame, textvariable=self.diplomas_var, state="readonly"
         )
-        self.capture_button.grid(row=0, column=0, sticky="ew")
+        self.diploma_combo.grid(row=2, column=2, columnspan=2, sticky="ew", pady=(4, 0))
+        self.diploma_combo.bind("<<ComboboxSelected>>", self._on_diploma_selected)
 
         # Status frame
         status_frame = ttk.LabelFrame(self.root, text="Estado de envio")
-        status_frame.grid(row=3, column=0, sticky="ew", **padding)
+        status_frame.grid(row=2, column=0, sticky="ew", **padding)
         status_frame.columnconfigure(1, weight=1)
 
         ttk.Label(status_frame, text="Ultimo OK:").grid(row=0, column=0, sticky="w")
@@ -403,8 +399,8 @@ class MainWindow:
 
         # Log frame
         log_frame = ttk.LabelFrame(self.root, text="Registro")
-        log_frame.grid(row=4, column=0, sticky="nsew", **padding)
-        self.root.rowconfigure(4, weight=1)
+        log_frame.grid(row=3, column=0, sticky="nsew", **padding)
+        self.root.rowconfigure(3, weight=1)
         log_frame.rowconfigure(0, weight=1)
         log_frame.columnconfigure(0, weight=1)
 
@@ -413,8 +409,6 @@ class MainWindow:
         scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text["yscrollcommand"] = scrollbar.set
-
-        self.root.after(100, self._ensure_udp_listener_running)
 
     def save_settings(self) -> None:
         old_port = self.udp_listener.port if self.udp_listener else None
@@ -431,10 +425,7 @@ class MainWindow:
             self.api_client.set_api_key(settings["api_key"])
             self.log_profile.set(settings["log_profile"])
             if settings["udp_port"] != old_port:
-                if self.udp_listener and self.udp_listener.is_running():
-                    self.udp_listener.stop()
-                    self.udp_listener = None
-                self._start_udp_listener(settings["udp_port"])
+                self._restart_udp_listener(settings["udp_port"])
             messagebox.showinfo("Ajustes", "Ajustes guardados correctamente.")
         except Exception as exc:
             messagebox.showerror("Ajustes", f"No se pudieron guardar: {exc}")
@@ -496,10 +487,13 @@ class MainWindow:
         else:
             self.diploma_combo.set("")
             self.selected_diploma_id = None
-        self._update_login_state(True, f"Conectado como {operator.get('displayName')}")
+        operator_callsign = (
+            operator.get("callsign") or operator.get("displayName") or operator.get("username")
+        )
+        self._update_login_state(True, f"Conectado como {operator_callsign}")
         self._log(f"Login OK: {operator.get('callsign')} ({operator.get('username')})")
         self.login_button.config(text="Logout")
-        self._refresh_capture_button_state()
+        self._ensure_udp_listener_running()
 
     def _on_login_error(self, exc: Exception) -> None:
         self._set_login_button_state(True)
@@ -507,7 +501,6 @@ class MainWindow:
         messagebox.showerror("Login", str(exc))
         self._log(f"Login error: {exc}")
         self.login_button.config(text="Login")
-        self._refresh_capture_button_state()
 
     def _update_login_state(self, ok: bool, text: str) -> None:
         color = "green" if ok else "red"
@@ -518,27 +511,17 @@ class MainWindow:
         idx = self.diploma_combo.current()
         if idx >= 0 and idx < len(self.diplomas):
             self.selected_diploma_id = self.diplomas[idx].id
-        self._refresh_capture_button_state()
 
     def _on_log_profile_changed(self, _event: Any) -> None:
+        if self.is_logged_in:
+            self._restart_udp_listener(self.udp_port_var.get())
+
+    def _restart_udp_listener(self, port: int) -> None:
         if self.udp_listener and self.udp_listener.is_running():
             self.udp_listener.stop()
             self.udp_listener = None
-            self._start_udp_listener(self.udp_port_var.get())
-
-    def _refresh_capture_button_state(self) -> None:
-        running = bool(self.udp_listener and self.udp_listener.is_running())
-        self.capture_button["state"] = "normal"
-        self.capture_button.config(text="Detener captura" if running else "Iniciar captura")
-
-    def toggle_capture(self) -> None:
-        if self.udp_listener and self.udp_listener.is_running():
-            self.udp_listener.stop()
-            self.udp_listener = None
-            self._refresh_capture_button_state()
-            return
-
-        self._start_udp_listener(self.udp_port_var.get())
+        if self.is_logged_in:
+            self._start_udp_listener(port)
 
     def _start_udp_listener(self, port: int) -> None:
         self.udp_listener = UdpListener(
@@ -549,19 +532,15 @@ class MainWindow:
             parse_func=self._get_parser_for_profile(),
         )
         self.udp_listener.start()
-        self._refresh_capture_button_state()
 
     def _ensure_udp_listener_running(self) -> None:
-        if not (self.udp_listener and self.udp_listener.is_running()):
+        if self.is_logged_in and not (self.udp_listener and self.udp_listener.is_running()):
             self._start_udp_listener(self.udp_port_var.get())
-        else:
-            self._refresh_capture_button_state()
 
     def _handle_udp_error(self, message: str) -> None:
         def _notify() -> None:
             messagebox.showerror("UDP", message)
             self.udp_listener = None
-            self._refresh_capture_button_state()
 
         self.root.after(0, _notify)
 
@@ -1026,13 +1005,15 @@ class MainWindow:
         self.log_text.see("end")
 
     def _perform_logout(self) -> None:
+        if self.udp_listener and self.udp_listener.is_running():
+            self.udp_listener.stop()
+            self.udp_listener = None
         self.diplomas = []
         self.selected_diploma_id = None
         self.diploma_combo.set("")
         self.diploma_combo["values"] = []
         self._update_login_state(False, "Desconectado")
         self.login_button.config(text="Login")
-        self._refresh_capture_button_state()
         self._log("Sesion cerrada por el usuario.")
 
 
