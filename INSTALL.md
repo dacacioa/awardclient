@@ -52,7 +52,7 @@ En iniciar-se, l'aplicació pot obrir:
 
 A la finestra principal, ompliu els camps següents:
 
-- **URL base**: `https://hamactivityback.davidacacio.com`
+- **URL base**: `https://activacionsbackend.urcat.cat`
 - **API Key**: la vostra clau API, disponible a l'aplicació web de HamActivity mitjançant el botó **API Key** de la part superior dreta
 - **Port UDP**: `9091` per defecte; només cal canviar-lo si el vostre entorn ho requereix
 
