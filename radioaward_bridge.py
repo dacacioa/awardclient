@@ -283,21 +283,6 @@ class MainWindow:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("HamActivity Bridge para N1MM")
-        self.entry_context_menu = tk.Menu(self.root, tearoff=0)
-        self.entry_context_menu.add_command(
-            label="Cortar", command=lambda: self._entry_event("<<Cut>>")
-        )
-        self.entry_context_menu.add_command(
-            label="Copiar", command=lambda: self._entry_event("<<Copy>>")
-        )
-        self.entry_context_menu.add_command(
-            label="Pegar", command=lambda: self._entry_event("<<Paste>>")
-        )
-        self.entry_context_menu.add_separator()
-        self.entry_context_menu.add_command(
-            label="Seleccionar todo", command=lambda: self._entry_event("<<SelectAll>>")
-        )
-        self._context_menu_target: Optional[tk.Widget] = None
 
         self.settings_manager = SettingsManager()
         settings = self.settings_manager.load()
@@ -327,9 +312,9 @@ class MainWindow:
 
         ttk.Label(settings_frame, text="URL base:").grid(row=0, column=0, sticky="w")
         self.base_url_var = tk.StringVar(value=settings["base_url"])
-        self.base_url_entry = ttk.Entry(settings_frame, textvariable=self.base_url_var)
-        self.base_url_entry.grid(row=0, column=1, sticky="ew")
-        self._bind_entry_context_menu(self.base_url_entry)
+        ttk.Entry(settings_frame, textvariable=self.base_url_var).grid(
+            row=0, column=1, sticky="ew"
+        )
 
         ttk.Label(settings_frame, text="API key:").grid(row=1, column=0, sticky="w")
         self.api_key_var = tk.StringVar(value=settings["api_key"])
@@ -337,18 +322,15 @@ class MainWindow:
             settings_frame, textvariable=self.api_key_var, show="*"
         )
         self.api_entry.grid(row=1, column=1, sticky="ew")
-        self._bind_entry_context_menu(self.api_entry)
         ttk.Button(settings_frame, text="Guardar", command=self.save_settings).grid(
             row=1, column=2, padx=4
         )
 
         ttk.Label(settings_frame, text="Puerto UDP:").grid(row=2, column=0, sticky="w")
         self.udp_port_var = tk.IntVar(value=settings["udp_port"])
-        self.udp_port_entry = ttk.Entry(
-            settings_frame, textvariable=self.udp_port_var, width=10
+        ttk.Entry(settings_frame, textvariable=self.udp_port_var, width=10).grid(
+            row=2, column=1, sticky="w"
         )
-        self.udp_port_entry.grid(row=2, column=1, sticky="w")
-        self._bind_entry_context_menu(self.udp_port_entry)
         ttk.Checkbutton(
             settings_frame, text="Debug", variable=self.debug_var
         ).grid(row=2, column=2, padx=4, sticky="w")
@@ -427,30 +409,6 @@ class MainWindow:
         scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text["yscrollcommand"] = scrollbar.set
-
-    def _bind_entry_context_menu(self, widget: tk.Widget) -> None:
-        widget.bind("<Button-3>", self._show_entry_context_menu)
-        widget.bind("<Control-a>", self._select_all_text)
-
-    def _show_entry_context_menu(self, event: tk.Event) -> str:
-        self._context_menu_target = event.widget
-        event.widget.focus_set()
-        try:
-            event.widget.icursor(f"@{event.x}")
-        except tk.TclError:
-            pass
-        self.entry_context_menu.tk_popup(event.x_root, event.y_root)
-        self.entry_context_menu.grab_release()
-        return "break"
-
-    def _entry_event(self, sequence: str) -> None:
-        if self._context_menu_target is None:
-            return
-        self._context_menu_target.event_generate(sequence)
-
-    def _select_all_text(self, event: tk.Event) -> str:
-        event.widget.event_generate("<<SelectAll>>")
-        return "break"
 
     def save_settings(self) -> None:
         old_port = self.udp_listener.port if self.udp_listener else None
