@@ -40,7 +40,7 @@ def utc_now() -> dt.datetime:
 
 # -- default settings (persisted per user) -------------------------------------
 DEFAULT_SETTINGS = {
-    "base_url": "https://hamactivityback.davidacacio.com/",
+    "base_url": "https://activacionsbackend.urcat.cat/",
     "api_key": "",
     "udp_port": 9091,
     "log_profile": "N1MM",
