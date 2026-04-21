@@ -27,12 +27,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pandoc wkhtmltopdf
 
-      - name: Generate installation PDF
+      - name: Generate Windows installation PDF
         env:
           VERSION: ${{ inputs.version || github.event.release.tag_name || github.ref_name }}
         run: |
           mkdir -p dist
-          pandoc INSTALL.md \
+          pandoc INSTALL-WINDOWS.md \
             --from gfm \
             --standalone \
             --resource-path=. \

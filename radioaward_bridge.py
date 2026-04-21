@@ -282,7 +282,7 @@ class MainWindow:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("HamActivity Bridge para N1MM")
+        self.root.title("HamActivity Bridge")
 
         self.settings_manager = SettingsManager()
         settings = self.settings_manager.load()
@@ -312,9 +312,8 @@ class MainWindow:
 
         ttk.Label(settings_frame, text="URL base:").grid(row=0, column=0, sticky="w")
         self.base_url_var = tk.StringVar(value=settings["base_url"])
-        ttk.Entry(settings_frame, textvariable=self.base_url_var).grid(
-            row=0, column=1, sticky="ew"
-        )
+        self.base_url_entry = ttk.Entry(settings_frame, textvariable=self.base_url_var)
+        self.base_url_entry.grid(row=0, column=1, sticky="ew")
 
         ttk.Label(settings_frame, text="API key:").grid(row=1, column=0, sticky="w")
         self.api_key_var = tk.StringVar(value=settings["api_key"])
@@ -328,9 +327,10 @@ class MainWindow:
 
         ttk.Label(settings_frame, text="Puerto UDP:").grid(row=2, column=0, sticky="w")
         self.udp_port_var = tk.IntVar(value=settings["udp_port"])
-        ttk.Entry(settings_frame, textvariable=self.udp_port_var, width=10).grid(
-            row=2, column=1, sticky="w"
+        self.udp_port_entry = ttk.Entry(
+            settings_frame, textvariable=self.udp_port_var, width=10
         )
+        self.udp_port_entry.grid(row=2, column=1, sticky="w")
         ttk.Checkbutton(
             settings_frame, text="Debug", variable=self.debug_var
         ).grid(row=2, column=2, padx=4, sticky="w")
@@ -409,6 +409,62 @@ class MainWindow:
         scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text["yscrollcommand"] = scrollbar.set
+        self._enable_context_menus()
+
+    def _enable_context_menus(self) -> None:
+        editable_widgets = (
+            self.base_url_entry,
+            self.api_entry,
+            self.udp_port_entry,
+        )
+        for widget in editable_widgets:
+            self._bind_context_menu(widget, readonly=False)
+        self._bind_context_menu(self.log_text, readonly=True)
+
+    def _bind_context_menu(self, widget: tk.Widget, readonly: bool) -> None:
+        widget.bind(
+            "<Button-3>",
+            lambda event, target=widget, read_only=readonly: self._show_context_menu(
+                event, target, read_only
+            ),
+        )
+        widget.bind(
+            "<Control-a>",
+            lambda event, target=widget: self._select_all(target),
+        )
+
+    def _show_context_menu(
+        self, event: tk.Event, widget: tk.Widget, readonly: bool
+    ) -> str:
+        widget.focus_set()
+        menu = tk.Menu(self.root, tearoff=False)
+        if not readonly:
+            menu.add_command(
+                label="Cortar",
+                command=lambda: widget.event_generate("<<Cut>>"),
+            )
+        menu.add_command(
+            label="Copiar",
+            command=lambda: widget.event_generate("<<Copy>>"),
+        )
+        if not readonly:
+            menu.add_command(
+                label="Pegar",
+                command=lambda: widget.event_generate("<<Paste>>"),
+            )
+        menu.add_separator()
+        menu.add_command(label="Seleccionar todo", command=lambda: self._select_all(widget))
+        menu.tk_popup(event.x_root, event.y_root)
+        return "break"
+
+    @staticmethod
+    def _select_all(widget: tk.Widget) -> str:
+        if isinstance(widget, tk.Text):
+            widget.tag_add("sel", "1.0", "end-1c")
+        else:
+            widget.selection_range(0, "end")  # type: ignore[attr-defined]
+            widget.icursor("end")  # type: ignore[attr-defined]
+        return "break"
 
     def save_settings(self) -> None:
         old_port = self.udp_listener.port if self.udp_listener else None

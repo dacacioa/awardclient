@@ -80,7 +80,7 @@ release:
    - Se ejecuta automáticamente al publicar una release y también admite
      ejecución manual con el tag deseado.
    - Corre en `ubuntu-latest`, instala `pandoc` y `wkhtmltopdf`.
-   - Convierte `INSTALL.md` en
+   - Convierte `INSTALL-WINDOWS.md` en
      `dist/hamactivity_bridge-install-<tag>.pdf` incluyendo las imágenes del
      documento.
    - Sube el PDF como artefacto del workflow y también como asset en la release.
