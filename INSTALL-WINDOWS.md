@@ -69,7 +69,7 @@ Premeu **Login**. Si la configuració és correcta, l'aplicació mostrarà un mi
 Comproveu que:
 
 - el **diploma** seleccionat és el correcte
-- el **format de log** és l'adequat, normalment `N1MM`
+- el **format de log** és l'adequat: `N1MM` per a N1MM/Log4OM o `WSJT-X/JTDX` per a JTDX/WSJT-X
 
 Si l'usuari només té assignat un diploma, aquest quedarà seleccionat automàticament.
 
@@ -110,6 +110,44 @@ Si treballeu amb `Log4OM`, configureu una sortida UDP amb aquests valors:
 
 ![Sortida UDP de Log4OM cap a HamActivity Bridge](img/log4om-2.png)
 
+## Configuració de JTDX
+
+Si treballeu amb `JTDX`, configureu `HamActivity Bridge` amb aquests valors:
+
+1. Seleccioneu el perfil de log `WSJT-X/JTDX`.
+2. Premeu **Guardar**.
+
+A JTDX, configureu l'enviament UDP de la manera següent:
+
+1. Obriu `Archiu - Configuracions`.
+2. Aneu a la pestanya **Informes**.
+3. A l'apartat **Servidor UDP primari**, indiqueu:
+   - **Servidor UDP**: `127.0.0.1`
+   - **Número del port del servidor UDP**: `9091`
+4. Activeu l'opció **Habilita l'enviament de log de dades de QSO's en format ADIF**.
+5. Manteniu marcada l'opció **Evita detectar missatges amb els indicatius no confirmats a través d'UDP**.
+6. Deseu la configuració amb **Acceptar**.
+
+![Configuració UDP a JTDX](img/jtdx-1.png)
+
+## Configuració de WSJT-X
+
+Si treballeu amb `WSJT-X`, configureu `HamActivity Bridge` amb aquests valors:
+
+1. Seleccioneu el perfil de log `WSJT-X/JTDX`.
+2. Premeu **Guardar**.
+
+A WSJT-X, configureu el servidor UDP de la manera següent:
+
+1. Obriu `Archivo` -> `Ajustes`.
+2. Aneu a la pestanya **Reportes**.
+3. A l'apartat **Servidor UDP**, indiqueu:
+   - **Servidor UDP**: `127.0.0.1`
+   - **Número de puerto del servidor UDP**: `9091`
+4. Deseu la configuració amb **Aceptar**.
+
+![Configuració UDP a WSJT-X](img/wsjt-x-1.png)
+
 ## Verificació de recepció
 
 Quan el programa de log estigui correctament configurat i envieu un QSO, aquest hauria d'aparèixer al registre de `HamActivity Bridge` com a enviat correctament.
@@ -121,3 +159,4 @@ Quan el programa de log estigui correctament configurat i envieu un QSO, aquest 
 - Si canvieu la configuració de xarxa o el port UDP, deseu els canvis abans de continuar.
 - Si tanqueu la sessió amb **Logout**, la recepció de dades UDP s'aturarà fins que torneu a fer **Login**.
 - Per a `N1MM` i `Log4OM`, el format de log recomanat a `HamActivity Bridge` és `N1MM`.
+- Per a `JTDX` i `WSJT-X`, el format de log recomanat és `WSJT-X/JTDX`.

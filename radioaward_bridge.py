@@ -13,12 +13,13 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import struct
 import socket
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 import xml.etree.ElementTree as ET
 
 import requests
@@ -168,7 +169,7 @@ class UdpListener:
         callback: Callable[[Dict[str, str]], None],
         error_callback: Optional[Callable[[str], None]] = None,
         log_callback: Optional[Callable[[str], None]] = None,
-        parse_func: Optional[Callable[[str], Dict[str, str]]] = None,
+        parse_func: Optional[Callable[[Union[bytes, str]], Dict[str, str]]] = None,
     ) -> None:
         self.port = port
         self.callback = callback
@@ -221,15 +222,15 @@ class UdpListener:
             except OSError:
                 break
 
-            payload = data.decode("utf-8", errors="ignore").strip()
-            if not payload:
+            text_payload = data.decode("utf-8", errors="ignore").strip()
+            if not data:
                 continue
 
-            LOGGER.debug("Datagram received: %s", payload)
+            LOGGER.debug("Datagram received: %s", text_payload or data.hex())
             if self.log_callback:
-                self.log_callback(f"UDP recibido: {payload}")
+                self.log_callback(f"UDP recibido: {text_payload or data.hex()}")
             parser = self.parse_func or self._parse_datagram
-            parsed = parser(payload)
+            parsed = parser(data)
             if parsed and parsed.get("CALL", "").strip():
                 self.callback(parsed)
 
@@ -239,7 +240,9 @@ class UdpListener:
             pass
 
     @staticmethod
-    def _parse_datagram(text: str) -> Dict[str, str]:
+    def _parse_datagram(text: Union[bytes, str]) -> Dict[str, str]:
+        if isinstance(text, bytes):
+            text = text.decode("utf-8", errors="ignore")
         stripped = text.strip()
         if not stripped:
             return {}
@@ -262,6 +265,86 @@ class UdpListener:
             key, value = chunk.split("=", 1)
             fields[key.strip().upper()] = value.strip()
         return fields
+
+
+class WsjtxDatagramReader:
+    """Minimal QDataStream reader for WSJT-X/JTDX UDP QSO Logged packets."""
+
+    MAGIC = 0xADBCCBDA
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+        self.offset = 0
+
+    def read_u8(self) -> int:
+        return self._unpack(">B")
+
+    def read_u32(self) -> int:
+        return self._unpack(">I")
+
+    def read_u64(self) -> int:
+        return self._unpack(">Q")
+
+    def read_i32(self) -> int:
+        return self._unpack(">i")
+
+    def read_i64(self) -> int:
+        return self._unpack(">q")
+
+    def read_utf8(self) -> str:
+        length = self.read_u32()
+        if length == 0xFFFFFFFF:
+            return ""
+        raw = self._read(length)
+        return raw.decode("utf-8", errors="replace").strip()
+
+    def read_qdatetime(self) -> Optional[dt.datetime]:
+        julian_day = self.read_i64()
+        msecs_since_midnight = self.read_u32()
+        time_spec = self.read_u8()
+        utc_offset_seconds = 0
+        if time_spec == 2:
+            utc_offset_seconds = self.read_i32()
+
+        if julian_day <= 0 or msecs_since_midnight >= 86_400_000:
+            return None
+
+        date_value = self._date_from_julian_day(julian_day)
+        time_value = (
+            dt.datetime.min
+            + dt.timedelta(milliseconds=msecs_since_midnight)
+        ).time()
+        value = dt.datetime.combine(date_value, time_value, tzinfo=dt.timezone.utc)
+        if time_spec == 2:
+            value -= dt.timedelta(seconds=utc_offset_seconds)
+        return value.astimezone(dt.timezone.utc)
+
+    def _read(self, length: int) -> bytes:
+        end = self.offset + length
+        if end > len(self.data):
+            raise IndexError("datagram ended before field was complete")
+        chunk = self.data[self.offset:end]
+        self.offset = end
+        return chunk
+
+    def _unpack(self, fmt: str) -> int:
+        size = struct.calcsize(fmt)
+        return struct.unpack(fmt, self._read(size))[0]
+
+    @staticmethod
+    def _date_from_julian_day(julian_day: int) -> dt.date:
+        # Fliegel-Van Flandern conversion from Julian day number to Gregorian date.
+        l_value = julian_day + 68569
+        n_value = 4 * l_value // 146097
+        l_value = l_value - (146097 * n_value + 3) // 4
+        i_value = 4000 * (l_value + 1) // 1461001
+        l_value = l_value - 1461 * i_value // 4 + 31
+        j_value = 80 * l_value // 2447
+        day = l_value - 2447 * j_value // 80
+        l_value = j_value // 11
+        month = j_value + 2 - 12 * l_value
+        year = 100 * (n_value - 49) + i_value + l_value
+        return dt.date(year, month, day)
 
 
 @dataclass
@@ -295,8 +378,8 @@ class MainWindow:
         self.log_profile = tk.StringVar(value=settings.get("log_profile", "N1MM"))
         self.debug_var = tk.BooleanVar(value=settings.get("debug", False))
         self._dedupe_lock = threading.Lock()
-        self._last_sent_signature: Optional[tuple] = None
-        self._last_attempt_signature: Optional[tuple] = None
+        self._sent_signatures: set[tuple] = set()
+        self._attempt_signatures: set[tuple] = set()
 
         self._build_ui(settings)
         self._update_login_state(False, "Desconectado")
@@ -357,7 +440,7 @@ class MainWindow:
         ttk.Label(login_frame, text="Log:").grid(row=1, column=1, sticky="e")
         self.log_profile_combo = ttk.Combobox(
             login_frame,
-            values=["N1MM", "MacLoggerDX"],
+            values=["N1MM", "WSJT-X/JTDX"],
             state="readonly",
             textvariable=self.log_profile,
             width=16,
@@ -569,6 +652,9 @@ class MainWindow:
             self.selected_diploma_id = self.diplomas[idx].id
 
     def _on_log_profile_changed(self, _event: Any) -> None:
+        if self.log_profile.get().strip().lower() in {"wsjt-x/jtdx", "wsjtx", "jtdx"}:
+            if self.udp_port_var.get() == DEFAULT_SETTINGS["udp_port"]:
+                self.udp_port_var.set(2237)
         if self.is_logged_in:
             self._restart_udp_listener(self.udp_port_var.get())
 
@@ -614,12 +700,12 @@ class MainWindow:
         timestamp = utc_now().strftime("%H:%M:%S")
         signature = self._build_dedupe_signature(payload)
         with self._dedupe_lock:
-            if signature == self._last_sent_signature or signature == self._last_attempt_signature:
+            if signature in self._sent_signatures or signature in self._attempt_signatures:
                 self._log(
                     f"[{timestamp}] QSO duplicado ignorado: {self._format_qso_summary(payload)}"
                 )
                 return
-            self._last_attempt_signature = signature
+            self._attempt_signatures.add(signature)
 
         if self.debug_var.get():
             self._log(f"[{timestamp}] Request: {json.dumps(payload)}")
@@ -639,9 +725,8 @@ class MainWindow:
             if self.debug_var.get():
                 self._log(f"[{timestamp}] Response: {response}")
             with self._dedupe_lock:
-                self._last_sent_signature = signature
-                if self._last_attempt_signature == signature:
-                    self._last_attempt_signature = None
+                self._sent_signatures.add(signature)
+                self._attempt_signatures.discard(signature)
         except Exception as exc:
             LOGGER.exception("Error sending contact: %s", exc)
             self.root.after(
@@ -652,8 +737,7 @@ class MainWindow:
             )
             self._log(f"[{timestamp}] Error: {exc}")
             with self._dedupe_lock:
-                if self._last_attempt_signature == signature:
-                    self._last_attempt_signature = None
+                self._attempt_signatures.discard(signature)
 
     def _build_contact_payload(self, data: Dict[str, str]) -> Optional[Dict[str, Any]]:
         api_key = (self.api_client.api_key or "").strip()
@@ -692,6 +776,17 @@ class MainWindow:
         if freq_value:
             payload["frequency"] = freq_value
 
+        exchange_sent = self._normalize_exchange(
+            data.get("STX_STRING") or data.get("RST_SENT") or data.get("SENT_EXCHANGE")
+        )
+        exchange_received = self._normalize_exchange(
+            data.get("SRX_STRING") or data.get("RST_RCVD") or data.get("RECEIVED_EXCHANGE")
+        )
+        if exchange_sent:
+            payload["sentExchange"] = exchange_sent
+        if exchange_received:
+            payload["receivedExchange"] = exchange_received
+
         country_value = data.get("COUNTRY") or data.get("COUNTRYPREFIX")
         if country_value:
             country_clean = str(country_value).strip()
@@ -707,27 +802,14 @@ class MainWindow:
         return payload
 
     def _build_dedupe_signature(self, payload: Dict[str, Any]) -> tuple:
-        keys = (
-            "diplomaId",
-            "callsign",
-            "qsoDateTime",
-            "band",
-            "mode",
-            "frequency",
-            "country",
-            "dxcc",
+        qso_date = str(payload.get("qsoDateTime") or "")[:10]
+        return (
+            str(payload.get("diplomaId") or "").strip(),
+            str(payload.get("callsign") or "").strip().upper(),
+            str(payload.get("band") or "").strip().upper(),
+            str(payload.get("mode") or "").strip().upper(),
+            qso_date,
         )
-        signature: List[str] = []
-        for key in keys:
-            value = payload.get(key)
-            if value is None:
-                cleaned = ""
-            else:
-                cleaned = str(value).strip()
-            if key in {"callsign", "band", "mode", "country"}:
-                cleaned = cleaned.upper()
-            signature.append(cleaned)
-        return tuple(signature)
 
     def _extract_qso_datetime(self, data: Dict[str, str]) -> Optional[str]:
         timestamp_field = data.get("TIMESTAMP") or data.get("TIME")
@@ -896,8 +978,15 @@ class MainWindow:
             "LSB": "SSB",
         }
         normalized = mapped.get(normalized, normalized)
-        allowed = {"SSB", "CW", "FT8", "FT4", "RTTY", "SSTV", "DIGITALVOICE", "FM"}
+        allowed = {"SSB", "CW", "FT8", "FT4", "DIGITAL", "RTTY", "SSTV", "DIGITALVOICE", "FM"}
         return normalized if normalized in allowed else None
+
+    @staticmethod
+    def _normalize_exchange(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned[:32] if cleaned else None
 
     @staticmethod
     def _normalize_frequency(value: Optional[str], band_hint: Optional[str] = None) -> Optional[str]:
@@ -978,62 +1067,55 @@ class MainWindow:
         formatted = f"{khz:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         return formatted[:32]
 
-    def _get_parser_for_profile(self) -> Callable[[str], Dict[str, str]]:
+    def _get_parser_for_profile(self) -> Callable[[Union[bytes, str]], Dict[str, str]]:
         profile = self.log_profile.get().strip().lower()
-        if profile == "macloggerdx":
-            return self._parse_macloggerdx
+        if profile in {"wsjt-x/jtdx", "wsjtx", "jtdx"}:
+            return self._parse_wsjtx_jtdx
         return UdpListener._parse_datagram
 
     @staticmethod
-    def _parse_macloggerdx(text: str) -> Dict[str, str]:
-        content = text.strip()
-        if not content:
+    def _parse_wsjtx_jtdx(data: Union[bytes, str]) -> Dict[str, str]:
+        if isinstance(data, str):
+            data = data.encode("latin-1", errors="ignore")
+
+        try:
+            reader = WsjtxDatagramReader(data)
+            magic = reader.read_u32()
+            if magic != WsjtxDatagramReader.MAGIC:
+                return {}
+            reader.read_u32()  # schema
+            message_type = reader.read_u32()
+            reader.read_utf8()  # client id
+
+            if message_type != 5:  # QSO Logged; ignore Decode and all other messages.
+                return {}
+
+            reader.read_qdatetime()  # Date & Time Off
+            call = reader.read_utf8()
+            reader.read_utf8()  # DX grid, ignored unless awards need it later.
+            frequency_hz = reader.read_u64()
+            mode = reader.read_utf8()
+            sent_report = reader.read_utf8()
+            received_report = reader.read_utf8()
+            reader.read_utf8()  # Tx power
+            reader.read_utf8()  # Comments
+            reader.read_utf8()  # Name
+            time_on = reader.read_qdatetime()
+
+            fields: Dict[str, str] = {
+                "CALL": call,
+                "FREQ": str(frequency_hz),
+                "MODE": mode,
+                "STX_STRING": sent_report,
+                "SRX_STRING": received_report,
+            }
+            if time_on:
+                fields["QSO_DATE"] = time_on.strftime("%Y%m%d")
+                fields["TIME_ON"] = time_on.strftime("%H%M%S")
+            return {key: value for key, value in fields.items() if value}
+        except (IndexError, struct.error, ValueError) as exc:
+            LOGGER.warning("Invalid or partial WSJT-X/JTDX datagram: %s", exc)
             return {}
-
-        # MacLoggerDX emits many report types; only Log Report represents a QSO.
-        if "log report" not in content.lower():
-            return {}
-
-        if "[" in content and "]" in content:
-            start = content.find("[")
-            end = content.rfind("]")
-            if end > start:
-                content = content[start + 1 : end]
-
-        report_type = ""
-        if ":" in content:
-            prefix, rest = content.split(":", 1)
-            report_type = prefix.strip().lower()
-            content = rest.strip()
-
-        # Only process QSO entries from MacLoggerDX; ignore Spot/Lookup/etc.
-        if report_type and report_type != "log report":
-            return {}
-
-        fields: Dict[str, str] = {}
-        for part in content.split(","):
-            chunk = part.strip()
-            if not chunk or ":" not in chunk:
-                continue
-            key, value = chunk.split(":", 1)
-            key_up = key.strip().upper()
-            val = value.strip()
-            if not key_up:
-                continue
-
-            if key_up in {"RXMHZ", "RXFREQ"}:
-                fields["RXFREQ"] = val
-            elif key_up in {"TXMHZ", "TXFREQ"}:
-                fields["TXFREQ"] = val
-            elif key_up == "DXCC_NUM":
-                fields["DXCC"] = val
-            elif key_up == "DXCC_STRING":
-                fields["COUNTRY"] = val
-            elif key_up in {"LOGGED_TIME", "LOGGEDTIME"}:
-                fields["TIMESTAMP"] = val
-            else:
-                fields[key_up] = val
-        return fields
 
     @staticmethod
     def _format_qso_summary(payload: Dict[str, Any]) -> str:
