@@ -79,7 +79,9 @@ Quan la sessió estigui iniciada i la configuració sigui correcta, ja podeu con
 
 ## Configuració de N1MM
 
-Si treballeu amb `N1MM`, configureu l'enviament UDP de la manera següent:
+Si treballeu amb `N1MM`, configureu `HamActivity Bridge` amb el format de log `N1MM`.
+
+A `N1MM`, configureu l'enviament UDP de la manera següent:
 
 1. Obriu `Config`.
 2. Entreu a `Configure Ports, Mode Control, Winkey, etc...`.
@@ -94,7 +96,9 @@ Si treballeu amb `N1MM`, configureu l'enviament UDP de la manera següent:
 
 ## Configuració de Log4OM
 
-Si treballeu amb `Log4OM`, configureu una sortida UDP amb aquests valors:
+Si treballeu amb `Log4OM`, configureu `HamActivity Bridge` amb el format de log `N1MM`.
+
+A `Log4OM`, configureu una sortida UDP amb aquests valors:
 
 1. Aneu al menú `Settings` -> `Program Configuration`.
 2. A la finestra de configuració, entreu a `Connections`.
@@ -131,9 +135,31 @@ A `SWISSLOG`, configureu el llibre de guàrdia en línia de la manera següent:
 
 ![Configuració UDP de SWISSLOG cap a HamActivity Bridge](img/swisslog-2.png)
 
+
+## Configuració de Ham Radio Deluxe (HRD)
+
+Si treballeu amb `Ham Radio Deluxe Logbook`, configureu `HamActivity Bridge` amb el format de log `N1MM`.
+
+A `HRD Logbook`, configureu el reenviament de QSO de la manera següent:
+
+1. Obriu el menú `Tools`.
+2. Entreu a `Configure`.
+3. Seleccioneu `QSO Forwarding`.
+4. A la pestanya **QSO Forwarding**, activeu l'opció **Forward logbook changes using UDP9/N1MM to other logging programs.**
+5. Configureu els camps d'enviament amb aquests valors:
+   - **Send Address**: `localhost`
+   - **Send Port**: `9091`
+6. Deixeu la resta d'opcions tal com estan si no necessiteu cap altra integració.
+7. Deseu la configuració amb **OK**.
+
+![Accés a la configuració de QSO Forwarding a HRD](img/hrdl-1.png)
+
+![Configuració UDP de HRD cap a HamActivity Bridge](img/hrdl-2.png)
+
+
 ## Configuració de JTDX
 
-Si treballeu amb `JTDX`, configureu `HamActivity Bridge` amb aquests valors:
+Si treballeu amb `JTDX`, configureu `HamActivity Bridge` amb el format de log `WSJT-X/JTDX`.
 
 1. Seleccioneu el perfil de log `WSJT-X/JTDX`.
 2. Premeu **Guardar**.
@@ -153,7 +179,7 @@ A JTDX, configureu l'enviament UDP de la manera següent:
 
 ## Configuració de WSJT-X
 
-Si treballeu amb `WSJT-X`, configureu `HamActivity Bridge` amb aquests valors:
+Si treballeu amb `WSJT-X`, configureu `HamActivity Bridge` amb el format de log `WSJT-X/JTDX`.
 
 1. Seleccioneu el perfil de log `WSJT-X/JTDX`.
 2. Premeu **Guardar**.
@@ -179,5 +205,5 @@ Quan el programa de log estigui correctament configurat i envieu un QSO, aquest 
 
 - Si canvieu la configuració de xarxa o el port UDP, deseu els canvis abans de continuar.
 - Si tanqueu la sessió amb **Logout**, la recepció de dades UDP s'aturarà fins que torneu a fer **Login**.
-- Per a `N1MM`, `Log4OM` i `SWISSLOG`, el format de log recomanat a `HamActivity Bridge` és `N1MM`.
+- Per a `N1MM`, `Log4OM`, `SWISSLOG` i `Ham Radio Deluxe (HRD)` el format de log recomanat a `HamActivity Bridge` és `N1MM`.
 - Per a `JTDX` i `WSJT-X`, el format de log recomanat és `WSJT-X/JTDX`.
