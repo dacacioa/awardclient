@@ -38,7 +38,7 @@ jobs:
             --resource-path=. \
             --pdf-engine=wkhtmltopdf \
             --pdf-engine-opt=--enable-local-file-access \
-            -o "dist/hamactivity_bridge-install-$VERSION.pdf"
+            -o "dist/hamactivity_bridge-install-windows-$VERSION.pdf"
           pandoc INSTALL-MAC.md \
             --from gfm \
             --standalone \
@@ -54,7 +54,7 @@ jobs:
         with:
           name: hamactivity_bridge-install-${{ env.VERSION }}
           path: |
-            dist/hamactivity_bridge-install-${{ env.VERSION }}.pdf
+            dist/hamactivity_bridge-install-windows-${{ env.VERSION }}.pdf
             dist/hamactivity_bridge-install-macos-${{ env.VERSION }}.pdf
 
       - name: Upload release asset
@@ -66,5 +66,5 @@ jobs:
             echo "VERSION no definido." >&2
             exit 1
           fi
-          gh release upload "$VERSION" "dist/hamactivity_bridge-install-$VERSION.pdf" --clobber
+          gh release upload "$VERSION" "dist/hamactivity_bridge-install-windows-$VERSION.pdf" --clobber
           gh release upload "$VERSION" "dist/hamactivity_bridge-install-macos-$VERSION.pdf" --clobber

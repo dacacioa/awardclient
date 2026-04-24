@@ -110,6 +110,27 @@ Si treballeu amb `Log4OM`, configureu una sortida UDP amb aquests valors:
 
 ![Sortida UDP de Log4OM cap a HamActivity Bridge](img/log4om-2.png)
 
+## Configuració de SWISSLOG
+
+Si treballeu amb `SWISSLOG`, configureu `HamActivity Bridge` amb el format de log `N1MM`.
+
+A `SWISSLOG`, configureu el llibre de guàrdia en línia de la manera següent:
+
+1. Obriu el menú `Opciones`.
+2. Entreu a `Libros Online`.
+3. A la finestra de configuració, aneu a la pestanya **UDP**.
+4. Activeu l'opció **Subir QSO automáticamente al guardar QSO (guardar en tiempo real)**.
+5. Activeu l'opció **Formato N1MM XML**.
+6. Deixeu desactivada l'opció **Formato ADIF**.
+7. Configureu els camps de connexió amb aquests valors:
+   - **Dirección IP**: `127.0.0.1`
+   - **Puerto**: `9091`
+8. Deseu la configuració amb **Aceptar**.
+
+![Accés a Libros Online a SWISSLOG](img/swisslog-1.png)
+
+![Configuració UDP de SWISSLOG cap a HamActivity Bridge](img/swisslog-2.png)
+
 ## Configuració de JTDX
 
 Si treballeu amb `JTDX`, configureu `HamActivity Bridge` amb aquests valors:
@@ -158,5 +179,5 @@ Quan el programa de log estigui correctament configurat i envieu un QSO, aquest 
 
 - Si canvieu la configuració de xarxa o el port UDP, deseu els canvis abans de continuar.
 - Si tanqueu la sessió amb **Logout**, la recepció de dades UDP s'aturarà fins que torneu a fer **Login**.
-- Per a `N1MM` i `Log4OM`, el format de log recomanat a `HamActivity Bridge` és `N1MM`.
+- Per a `N1MM`, `Log4OM` i `SWISSLOG`, el format de log recomanat a `HamActivity Bridge` és `N1MM`.
 - Per a `JTDX` i `WSJT-X`, el format de log recomanat és `WSJT-X/JTDX`.
