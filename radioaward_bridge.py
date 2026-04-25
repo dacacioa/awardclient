@@ -363,6 +363,8 @@ class Diploma:
 class MainWindow:
     """Tk main window wiring GUI, API client and UDP listener together."""
 
+    DEDUPE_WINDOW_SECONDS = 15
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("HamActivity Bridge")
@@ -378,8 +380,8 @@ class MainWindow:
         self.log_profile = tk.StringVar(value=settings.get("log_profile", "N1MM"))
         self.debug_var = tk.BooleanVar(value=settings.get("debug", False))
         self._dedupe_lock = threading.Lock()
-        self._sent_signatures: set[tuple] = set()
-        self._attempt_signatures: set[tuple] = set()
+        self._sent_signatures: dict[tuple, set[dt.datetime]] = {}
+        self._attempt_signatures: dict[tuple, set[dt.datetime]] = {}
 
         self._build_ui(settings)
         self._update_login_state(False, "Desconectado")
@@ -698,14 +700,15 @@ class MainWindow:
             return
 
         timestamp = utc_now().strftime("%H:%M:%S")
-        signature = self._build_dedupe_signature(payload)
+        signature, qso_datetime = self._build_dedupe_signature(payload)
         with self._dedupe_lock:
-            if signature in self._sent_signatures or signature in self._attempt_signatures:
+            self._prune_signature_times(signature, qso_datetime)
+            if self._is_duplicate_signature(signature, qso_datetime):
                 self._log(
                     f"[{timestamp}] QSO duplicado ignorado: {self._format_qso_summary(payload)}"
                 )
                 return
-            self._attempt_signatures.add(signature)
+            self._store_signature_time(self._attempt_signatures, signature, qso_datetime)
 
         if self.debug_var.get():
             self._log(f"[{timestamp}] Request: {json.dumps(payload)}")
@@ -725,8 +728,10 @@ class MainWindow:
             if self.debug_var.get():
                 self._log(f"[{timestamp}] Response: {response}")
             with self._dedupe_lock:
-                self._sent_signatures.add(signature)
-                self._attempt_signatures.discard(signature)
+                self._store_signature_time(self._sent_signatures, signature, qso_datetime)
+                self._discard_signature_time(
+                    self._attempt_signatures, signature, qso_datetime
+                )
         except Exception as exc:
             LOGGER.exception("Error sending contact: %s", exc)
             self.root.after(
@@ -737,7 +742,9 @@ class MainWindow:
             )
             self._log(f"[{timestamp}] Error: {exc}")
             with self._dedupe_lock:
-                self._attempt_signatures.discard(signature)
+                self._discard_signature_time(
+                    self._attempt_signatures, signature, qso_datetime
+                )
 
     def _build_contact_payload(self, data: Dict[str, str]) -> Optional[Dict[str, Any]]:
         api_key = (self.api_client.api_key or "").strip()
@@ -801,15 +808,89 @@ class MainWindow:
 
         return payload
 
-    def _build_dedupe_signature(self, payload: Dict[str, Any]) -> tuple:
-        qso_date = str(payload.get("qsoDateTime") or "")[:10]
+    def _build_dedupe_signature(
+        self, payload: Dict[str, Any]
+    ) -> tuple[tuple[str, str, str, str], Optional[dt.datetime]]:
+        qso_datetime = self._parse_qso_datetime(payload.get("qsoDateTime"))
         return (
             str(payload.get("diplomaId") or "").strip(),
             str(payload.get("callsign") or "").strip().upper(),
             str(payload.get("band") or "").strip().upper(),
             str(payload.get("mode") or "").strip().upper(),
-            qso_date,
-        )
+        ), qso_datetime
+
+    @staticmethod
+    def _parse_qso_datetime(value: Any) -> Optional[dt.datetime]:
+        if not value:
+            return None
+        clean = str(value).strip()
+        if not clean:
+            return None
+        if clean.endswith("Z"):
+            clean = clean[:-1] + "+00:00"
+        try:
+            parsed = dt.datetime.fromisoformat(clean)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        else:
+            parsed = parsed.astimezone(dt.timezone.utc)
+        return parsed
+
+    def _is_duplicate_signature(
+        self, signature: tuple[str, str, str, str], qso_datetime: Optional[dt.datetime]
+    ) -> bool:
+        if qso_datetime is None:
+            return False
+        for seen_at in self._sent_signatures.get(signature, set()):
+            if abs((qso_datetime - seen_at).total_seconds()) <= self.DEDUPE_WINDOW_SECONDS:
+                return True
+        for seen_at in self._attempt_signatures.get(signature, set()):
+            if abs((qso_datetime - seen_at).total_seconds()) <= self.DEDUPE_WINDOW_SECONDS:
+                return True
+        return False
+
+    @staticmethod
+    def _store_signature_time(
+        store: dict[tuple[str, str, str, str], set[dt.datetime]],
+        signature: tuple[str, str, str, str],
+        qso_datetime: Optional[dt.datetime],
+    ) -> None:
+        if qso_datetime is None:
+            return
+        store.setdefault(signature, set()).add(qso_datetime)
+
+    @staticmethod
+    def _discard_signature_time(
+        store: dict[tuple[str, str, str, str], set[dt.datetime]],
+        signature: tuple[str, str, str, str],
+        qso_datetime: Optional[dt.datetime],
+    ) -> None:
+        if qso_datetime is None:
+            return
+        values = store.get(signature)
+        if not values:
+            return
+        values.discard(qso_datetime)
+        if not values:
+            store.pop(signature, None)
+
+    def _prune_signature_times(
+        self, signature: tuple[str, str, str, str], qso_datetime: Optional[dt.datetime]
+    ) -> None:
+        if qso_datetime is None:
+            return
+        cutoff = qso_datetime - dt.timedelta(seconds=self.DEDUPE_WINDOW_SECONDS)
+        for store in (self._sent_signatures, self._attempt_signatures):
+            values = store.get(signature)
+            if not values:
+                continue
+            active_values = {seen_at for seen_at in values if seen_at >= cutoff}
+            if active_values:
+                store[signature] = active_values
+            else:
+                store.pop(signature, None)
 
     def _extract_qso_datetime(self, data: Dict[str, str]) -> Optional[str]:
         timestamp_field = data.get("TIMESTAMP") or data.get("TIME")
