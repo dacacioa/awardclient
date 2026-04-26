@@ -46,6 +46,7 @@ DEFAULT_SETTINGS = {
     "udp_port": 9091,
     "log_profile": "N1MM",
     "debug": False,
+    "last_diploma_id": "",
 }
 
 
@@ -363,7 +364,7 @@ class Diploma:
 class MainWindow:
     """Tk main window wiring GUI, API client and UDP listener together."""
 
-    DEDUPE_WINDOW_SECONDS = 15
+    DEDUPE_WINDOW_SECONDS = 60
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -375,6 +376,7 @@ class MainWindow:
         self.udp_listener: Optional[UdpListener] = None
         self.diplomas: List[Diploma] = []
         self.selected_diploma_id: Optional[str] = None
+        self.last_diploma_id = str(settings.get("last_diploma_id") or "").strip()
         self.qso_counter = 0
         self.is_logged_in = False
         self.log_profile = tk.StringVar(value=settings.get("log_profile", "N1MM"))
@@ -551,23 +553,32 @@ class MainWindow:
             widget.icursor("end")  # type: ignore[attr-defined]
         return "break"
 
-    def save_settings(self) -> None:
-        old_port = self.udp_listener.port if self.udp_listener else None
-        settings = {
+    def _collect_settings(self) -> Dict[str, Any]:
+        return {
             "base_url": self.base_url_var.get().strip(),
             "api_key": self.api_key_var.get().strip(),
             "udp_port": self.udp_port_var.get(),
             "log_profile": self.log_profile.get(),
             "debug": bool(self.debug_var.get()),
+            "last_diploma_id": (self.selected_diploma_id or self.last_diploma_id or "").strip(),
         }
-        try:
-            self.settings_manager.save(settings)
-            self.api_client.set_base_url(settings["base_url"])
-            self.api_client.set_api_key(settings["api_key"])
-            self.log_profile.set(settings["log_profile"])
-            if settings["udp_port"] != old_port:
-                self._restart_udp_listener(settings["udp_port"])
+
+    def _save_settings(self, show_message: bool) -> None:
+        old_port = self.udp_listener.port if self.udp_listener else None
+        settings = self._collect_settings()
+        self.settings_manager.save(settings)
+        self.api_client.set_base_url(settings["base_url"])
+        self.api_client.set_api_key(settings["api_key"])
+        self.log_profile.set(settings["log_profile"])
+        self.last_diploma_id = settings["last_diploma_id"]
+        if settings["udp_port"] != old_port:
+            self._restart_udp_listener(settings["udp_port"])
+        if show_message:
             messagebox.showinfo("Ajustes", "Ajustes guardados correctamente.")
+
+    def save_settings(self) -> None:
+        try:
+            self._save_settings(show_message=True)
         except Exception as exc:
             messagebox.showerror("Ajustes", f"No se pudieron guardar: {exc}")
 
@@ -623,17 +634,28 @@ class MainWindow:
         self.diplomas = diplomas
         if diplomas:
             self.diploma_combo["values"] = [d.label() for d in diplomas]
-            self.diploma_combo.current(0)
-            self.selected_diploma_id = diplomas[0].id
+            remembered_idx = next(
+                (idx for idx, diploma in enumerate(diplomas) if diploma.id == self.last_diploma_id),
+                -1,
+            )
+            selected_idx = remembered_idx if remembered_idx >= 0 else 0
+            self.diploma_combo.current(selected_idx)
+            self.selected_diploma_id = diplomas[selected_idx].id
+            self.last_diploma_id = self.selected_diploma_id
         else:
             self.diploma_combo.set("")
             self.selected_diploma_id = None
+            self.last_diploma_id = ""
         operator_callsign = (
             operator.get("callsign") or operator.get("displayName") or operator.get("username")
         )
         self._update_login_state(True, f"Conectado como {operator_callsign}")
         self._log(f"Login OK: {operator.get('callsign')} ({operator.get('username')})")
         self.login_button.config(text="Logout")
+        try:
+            self._save_settings(show_message=False)
+        except Exception as exc:
+            LOGGER.warning("Unable to persist active diploma after login: %s", exc)
         self._ensure_udp_listener_running()
 
     def _on_login_error(self, exc: Exception) -> None:
@@ -652,6 +674,11 @@ class MainWindow:
         idx = self.diploma_combo.current()
         if idx >= 0 and idx < len(self.diplomas):
             self.selected_diploma_id = self.diplomas[idx].id
+            self.last_diploma_id = self.selected_diploma_id
+            try:
+                self._save_settings(show_message=False)
+            except Exception as exc:
+                LOGGER.warning("Unable to persist selected diploma: %s", exc)
 
     def _on_log_profile_changed(self, _event: Any) -> None:
         if self.log_profile.get().strip().lower() in {"wsjt-x/jtdx", "wsjtx", "jtdx"}:
@@ -783,16 +810,31 @@ class MainWindow:
         if freq_value:
             payload["frequency"] = freq_value
 
-        exchange_sent = self._normalize_exchange(
-            data.get("STX_STRING") or data.get("RST_SENT") or data.get("SENT_EXCHANGE")
+        rst_sent = self._normalize_exchange(
+            self._resolve_exchange(
+                data,
+                primary_keys=("STX_STRING", "SENTEXCHANGE", "SENT_EXCHANGE", "RST_SENT"),
+                report_key="SNT",
+                serial_key="SNTNR",
+            )
         )
-        exchange_received = self._normalize_exchange(
-            data.get("SRX_STRING") or data.get("RST_RCVD") or data.get("RECEIVED_EXCHANGE")
+        rst_rcvd = self._normalize_exchange(
+            self._resolve_exchange(
+                data,
+                primary_keys=(
+                    "SRX_STRING",
+                    "RECEIVEDEXCHANGE",
+                    "RECEIVED_EXCHANGE",
+                    "RST_RCVD",
+                ),
+                report_key="RCV",
+                serial_key="RCVNR",
+            )
         )
-        if exchange_sent:
-            payload["sentExchange"] = exchange_sent
-        if exchange_received:
-            payload["receivedExchange"] = exchange_received
+        if rst_sent:
+            payload["rstSent"] = rst_sent
+        if rst_rcvd:
+            payload["rstRcvd"] = rst_rcvd
 
         country_value = data.get("COUNTRY") or data.get("COUNTRYPREFIX")
         if country_value:
@@ -1068,6 +1110,27 @@ class MainWindow:
             return None
         cleaned = str(value).strip()
         return cleaned[:32] if cleaned else None
+
+    @staticmethod
+    def _resolve_exchange(
+        data: Dict[str, str],
+        primary_keys: tuple[str, ...],
+        report_key: str,
+        serial_key: str,
+    ) -> Optional[str]:
+        for key in primary_keys:
+            value = data.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+
+        parts: List[str] = []
+        report = str(data.get(report_key) or "").strip()
+        serial = str(data.get(serial_key) or "").strip()
+        if report:
+            parts.append(report)
+        if serial and serial != "0":
+            parts.append(serial)
+        return " ".join(parts) if parts else None
 
     @staticmethod
     def _normalize_frequency(value: Optional[str], band_hint: Optional[str] = None) -> Optional[str]:
