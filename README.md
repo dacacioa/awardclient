@@ -48,9 +48,9 @@ La aplicación guardará la URL base, API key, perfil de log y puerto UDP en
 
 ## Builds automáticos (GitHub Actions)
 
-Este repo incluye cuatro workflows que se ejecutan al publicar una release o de
-forma manual desde Actions. Tres empaquetan la app con PyInstaller y uno genera
-la guía de instalación en PDF; todos suben sus artefactos como assets de la
+Este repo incluye cinco workflows que se ejecutan al publicar una release o de
+forma manual desde Actions. Tres empaquetan la app con PyInstaller y dos generan
+documentación en PDF; todos suben sus artefactos como assets de la
 release:
 
 1. **Build Windows Binary** (`.github/workflows/build-windows.yml`):
@@ -84,6 +84,14 @@ release:
      `dist/hamactivity_bridge-install-windows-<tag>.pdf` y
      `dist/hamactivity_bridge-install-macos-<tag>.pdf`, incluyendo las imágenes
      de cada documento.
+   - Sube el PDF como artefacto del workflow y también como asset en la release.
+
+5. **Build Operator PDF** (`.github/workflows/build-operator-pdf.yml`):
+   - Se ejecuta automáticamente al publicar una release y también admite
+     ejecución manual con el tag deseado.
+   - Corre en `ubuntu-latest`, instala `pandoc` y `wkhtmltopdf`.
+   - Convierte `OPERATOR.md` en `dist/hamactivity_bridge-operator-<tag>.pdf`,
+     incluyendo las imágenes del manual.
    - Sube el PDF como artefacto del workflow y también como asset en la release.
 
 Tras ejecutar cualquiera de los workflows podrás descargar los artefactos
