@@ -365,6 +365,7 @@ class MainWindow:
     """Tk main window wiring GUI, API client and UDP listener together."""
 
     DEDUPE_WINDOW_SECONDS = 60
+    FUTURE_QSO_TOLERANCE_SECONDS = 5
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -727,6 +728,21 @@ class MainWindow:
             return
 
         timestamp = utc_now().strftime("%H:%M:%S")
+        qso_datetime = self._parse_qso_datetime(payload.get("qsoDateTime"))
+        if self._is_future_qso_datetime(qso_datetime):
+            message = (
+                f"QSO rechazado por fecha/hora futura: {self._format_qso_summary(payload)}"
+            )
+            self.root.after(
+                0,
+                lambda: self.last_error_var.set(
+                    f"{utc_now().strftime('%Y-%m-%dT%H:%M:%SZ')} - {message}"
+                ),
+            )
+            self._log(f"[{timestamp}] {message}")
+            LOGGER.warning("Rejected future QSO: %s", payload)
+            return
+
         signature, qso_datetime = self._build_dedupe_signature(payload)
         with self._dedupe_lock:
             self._prune_signature_times(signature, qso_datetime)
@@ -879,6 +895,13 @@ class MainWindow:
         else:
             parsed = parsed.astimezone(dt.timezone.utc)
         return parsed
+
+    def _is_future_qso_datetime(self, qso_datetime: Optional[dt.datetime]) -> bool:
+        if qso_datetime is None:
+            return False
+        return qso_datetime > utc_now() + dt.timedelta(
+            seconds=self.FUTURE_QSO_TOLERANCE_SECONDS
+        )
 
     def _is_duplicate_signature(
         self, signature: tuple[str, str, str, str], qso_datetime: Optional[dt.datetime]
