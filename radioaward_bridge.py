@@ -180,20 +180,28 @@ class UdpListener:
         self._socket: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
+        self._state_lock = threading.Lock()
 
     def start(self) -> None:
-        if self._running.is_set():
-            return
-        self._running.set()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
+        with self._state_lock:
+            if self._running.is_set():
+                return
+            self._running.set()
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
         LOGGER.info("UDP listener started on port %s", self.port)
 
     def stop(self) -> None:
-        self._running.clear()
-        if self._socket:
+        with self._state_lock:
+            if not self._running.is_set():
+                return
+            self._running.clear()
+            sock = self._socket
+
+        if sock:
             try:
-                self._socket.close()
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as wakeup_sock:
+                    wakeup_sock.sendto(b"", ("127.0.0.1", self.port))
             except OSError:
                 pass
         LOGGER.info("UDP listener stopped.")
@@ -213,32 +221,40 @@ class UdpListener:
             self._running.clear()
             return
 
-        self._socket = sock
-
-        while self._running.is_set():
-            try:
-                data, _addr = sock.recvfrom(4096)
-            except socket.timeout:
-                continue
-            except OSError:
-                break
-
-            text_payload = data.decode("utf-8", errors="ignore").strip()
-            if not data:
-                continue
-
-            LOGGER.debug("Datagram received: %s", text_payload or data.hex())
-            if self.log_callback:
-                self.log_callback(f"UDP recibido: {text_payload or data.hex()}")
-            parser = self.parse_func or self._parse_datagram
-            parsed = parser(data)
-            if parsed and parsed.get("CALL", "").strip():
-                self.callback(parsed)
+        with self._state_lock:
+            self._socket = sock
 
         try:
-            sock.close()
-        except OSError:
-            pass
+            while self._running.is_set():
+                try:
+                    data, _addr = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break
+
+                if not self._running.is_set():
+                    break
+                if not data:
+                    continue
+
+                text_payload = data.decode("utf-8", errors="ignore").strip()
+                LOGGER.debug("Datagram received: %s", text_payload or data.hex())
+                if self.log_callback:
+                    self.log_callback(f"UDP recibido: {text_payload or data.hex()}")
+                parser = self.parse_func or self._parse_datagram
+                parsed = parser(data)
+                if parsed and parsed.get("CALL", "").strip():
+                    self.callback(parsed)
+        finally:
+            with self._state_lock:
+                if self._socket is sock:
+                    self._socket = None
+                self._thread = None
+            try:
+                sock.close()
+            except OSError:
+                pass
 
     @staticmethod
     def _parse_datagram(text: Union[bytes, str]) -> Dict[str, str]:
