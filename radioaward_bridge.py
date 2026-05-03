@@ -1107,6 +1107,11 @@ class MainWindow:
                         return result
                 except ValueError:
                     pass
+            parsed_band = parse_freq(value)
+            if parsed_band is not None:
+                result = from_mhz(parsed_band)
+                if result:
+                    return result
             try:
                 mhz = float(value)
                 result = from_mhz(mhz)
