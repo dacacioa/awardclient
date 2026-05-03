@@ -836,7 +836,7 @@ class MainWindow:
         if band_value:
             payload["band"] = band_value
 
-        if mode := self._normalize_mode(data.get("MODE")):
+        if mode := self._normalize_mode(data.get("MODE"), data.get("SUBMODE")):
             payload["mode"] = mode
 
         freq_value = self._normalize_frequency(
@@ -1140,17 +1140,39 @@ class MainWindow:
         return None
 
     @staticmethod
-    def _normalize_mode(mode: Optional[str]) -> Optional[str]:
-        if not mode:
+    def _normalize_mode(mode: Optional[str], submode: Optional[str] = None) -> Optional[str]:
+        raw_mode = (mode or "").strip().upper()
+        raw_submode = (submode or "").strip().upper()
+        if not raw_mode and not raw_submode:
             return None
-        normalized = mode.strip().upper()
-        mapped = {
+
+        direct_mode_map = {
             "USB": "SSB",
             "LSB": "SSB",
+            "DIGITALVOICE": "DIGITALVOICE",
+            "DIGITAL VOICE": "DIGITALVOICE",
         }
-        normalized = mapped.get(normalized, normalized)
-        allowed = {"SSB", "CW", "FT8", "FT4", "DIGITAL", "RTTY", "SSTV", "DIGITALVOICE", "FM"}
-        return normalized if normalized in allowed else None
+
+        allowed = {"SSB", "CW", "FT8", "FT4", "RTTY", "SSTV", "DIGITALVOICE", "FM"}
+
+        # HRD may emit ADIF base mode + submode; collapse only to modes accepted by /contacts.
+        submode_map = {
+            "FT8": "FT8",
+            "FT4": "FT4",
+            "DMR": "DIGITALVOICE",
+            "DSTAR": "DIGITALVOICE",
+            "C4FM": "DIGITALVOICE",
+            "FREEDV": "DIGITALVOICE",
+            "M17": "DIGITALVOICE",
+        }
+        if raw_submode in submode_map:
+            return submode_map[raw_submode]
+
+        normalized_mode = direct_mode_map.get(raw_mode, raw_mode)
+        if normalized_mode in allowed:
+            return normalized_mode
+
+        return None
 
     @staticmethod
     def _normalize_exchange(value: Optional[str]) -> Optional[str]:
