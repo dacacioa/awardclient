@@ -381,7 +381,7 @@ class MainWindow:
     """Tk main window wiring GUI, API client and UDP listener together."""
 
     DEDUPE_WINDOW_SECONDS = 60
-    FUTURE_QSO_TOLERANCE_SECONDS = 5
+    FUTURE_QSO_TOLERANCE_SECONDS = 120
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
