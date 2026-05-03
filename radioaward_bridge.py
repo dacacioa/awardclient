@@ -270,6 +270,10 @@ class UdpListener:
             except ET.ParseError as exc:
                 LOGGER.error("Invalid XML datagram: %s", exc)
                 return {}
+            root_tag = root.tag.strip().lower()
+            if root_tag not in {"contactinfo", "contact"}:
+                LOGGER.info("Ignoring unsupported N1MM XML datagram: %s", root_tag)
+                return {}
             fields = {}
             for child in root:
                 fields[child.tag.strip().upper()] = (child.text or "").strip()
