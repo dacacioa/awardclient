@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import struct
 import unittest
 from types import SimpleNamespace
@@ -74,6 +75,28 @@ def build_wsjtx_logged_packet(
             pack_qdatetime(time_on),
         ]
     )
+
+
+def build_qlog_qso_packet(
+    *,
+    operation: str,
+    adif_value: str,
+    qso_type: str = "adif",
+) -> bytes:
+    return json.dumps(
+        {
+            "appid": "QLog",
+            "logid": "{test-log-id}",
+            "msgtype": "qso",
+            "time": 1770000000000,
+            "data": {
+                "operation": operation,
+                "rowid": 355,
+                "type": qso_type,
+                "value": adif_value,
+            },
+        }
+    ).encode("utf-8")
 
 
 class RadioAwardBridgeTests(unittest.TestCase):
@@ -281,6 +304,242 @@ class RadioAwardBridgeTests(unittest.TestCase):
             ]
         )
         self.assertEqual(MainWindow._parse_wsjtx_jtdx(packet), {})
+
+    def test_qlog_qso_packets_build_expected_payloads(self) -> None:
+        window = make_window()
+        cases = [
+            {
+                "name": "QLog insert packet with ADIF mode and timestamp",
+                "packet": build_qlog_qso_packet(
+                    operation="insert",
+                    adif_value=(
+                        "<call:6>EA3QLO<qso_date:8:D>20260503<time_on:6:T>194849"
+                        "<freq:8:N>14.07400<band:3>20m<mode:3>FT8"
+                        "<rst_sent:3>-08<rst_rcvd:3>-12<country:5>Spain<dxcc:3>281<eor>"
+                    ),
+                ),
+                "expected": {
+                    "callsign": "EA3QLO",
+                    "qsoDateTime": "2026-05-03T19:48:49Z",
+                    "band": "20m",
+                    "frequency": "14.074,00",
+                    "mode": "FT8",
+                    "rstSent": "-08",
+                    "rstRcvd": "-12",
+                    "country": "Spain",
+                    "dxcc": "281",
+                },
+            },
+            {
+                "name": "QLog insert packet preserves base SSB mode when submode is USB",
+                "packet": json.dumps(
+                    {
+                        "appid": "QLog",
+                        "data": {
+                            "operation": "insert",
+                            "rowid": 6,
+                            "type": "adif",
+                            "value": (
+                                "<call:6>EA3IMR<rst_sent:2>59<rst_rcvd:2>59<freq:5>7.074"
+                                "<band:3>40m<mode:3>SSB<submode:3>USB"
+                                "<qso_date:8>20260508<time_on:6>171559<eor>"
+                            ),
+                        },
+                        "logid": "{6f4ce8da-1e0d-4cc6-a9a0-848147079d90}",
+                        "msgtype": "qso",
+                        "time": 1778260559234,
+                    }
+                ).encode("utf-8"),
+                "expected": {
+                    "callsign": "EA3IMR",
+                    "qsoDateTime": "2026-05-08T17:15:59Z",
+                    "band": "40m",
+                    "frequency": "7.074,00",
+                    "mode": "SSB",
+                    "rstSent": "59",
+                    "rstRcvd": "59",
+                },
+            },
+            {
+                "name": "QLog insert packet collapses submode to DIGITALVOICE",
+                "packet": build_qlog_qso_packet(
+                    operation="insert",
+                    adif_value=(
+                        "<call:6>EA3DMR<qso_date:8:D>20260503<time_on:6:T>201500"
+                        "<freq:9:N>145.65000<band:2>2m<mode:12>DIGITALVOICE"
+                        "<submode:3>DMR<rst_sent:2>59<rst_rcvd:2>59<eor>"
+                    ),
+                ),
+                "expected": {
+                    "callsign": "EA3DMR",
+                    "qsoDateTime": "2026-05-03T20:15:00Z",
+                    "band": "2m",
+                    "frequency": "145.650,00",
+                    "mode": "DIGITALVOICE",
+                    "rstSent": "59",
+                    "rstRcvd": "59",
+                },
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                parsed = MainWindow._parse_qlog(case["packet"])
+                payload = window._build_contact_payload(parsed)
+
+                self.assertIsNotNone(payload)
+                for key, expected_value in case["expected"].items():
+                    self.assertEqual(payload.get(key), expected_value)
+
+    def test_qlog_non_supported_packets_are_ignored(self) -> None:
+        update_packet = build_qlog_qso_packet(
+            operation="update",
+            adif_value="<call:6>EA3UPD<qso_date:8:D>20260503<time_on:6:T>194849<eor>",
+        )
+        delete_packet = build_qlog_qso_packet(
+            operation="delete",
+            adif_value="<call:6>EA3DEL<qso_date:8:D>20260503<time_on:6:T>194849<eor>",
+        )
+        wrong_type_packet = build_qlog_qso_packet(
+            operation="insert",
+            adif_value="<call:6>EA3BAD<eor>",
+            qso_type="json",
+        )
+        non_qso_packet = json.dumps(
+            {"appid": "QLog", "msgtype": "dxspot", "data": {"call": "EA3DX"}}
+        ).encode("utf-8")
+
+        self.assertEqual(MainWindow._parse_qlog(update_packet), {})
+        self.assertEqual(MainWindow._parse_qlog(delete_packet), {})
+        self.assertEqual(MainWindow._parse_qlog(wrong_type_packet), {})
+        self.assertEqual(MainWindow._parse_qlog(non_qso_packet), {})
+
+    def test_regression_samples_cover_transport_and_timestamp_variants(self) -> None:
+        window = make_window()
+        cases = [
+            {
+                "name": "N1MM tab-delimited with qso_date and time_on fallback",
+                "message": (
+                    "CALL=EA3N1M\tBAND=14\tFREQ=14074000\tMODE=RTTY\t"
+                    "QSO_DATE=20260503\tTIME_ON=194849\tSNT=599\tRCV=579"
+                ),
+                "expected": {
+                    "callsign": "EA3N1M",
+                    "qsoDateTime": "2026-05-03T19:48:49Z",
+                    "band": "20m",
+                    "frequency": "14.074,00",
+                    "mode": "RTTY",
+                    "rstSent": "599",
+                    "rstRcvd": "579",
+                },
+            },
+            {
+                "name": "HRD timestamp with milliseconds and utc offset",
+                "message": """<?xml version="1.0" encoding="utf-8"?>
+<contactinfo>
+  <app>HamRadioDeluxe</app>
+  <timestamp>2026-05-03 21:48:49.250 +0200</timestamp>
+  <band>14</band>
+  <txfreq>14074000</txfreq>
+  <mode>MFSK</mode>
+  <submode>FT8</submode>
+  <call>EA3UTC</call>
+  <snt>-03</snt>
+  <rcv>-09</rcv>
+</contactinfo>""",
+                "expected": {
+                    "callsign": "EA3UTC",
+                    "qsoDateTime": "2026-05-03T19:48:49Z",
+                    "band": "20m",
+                    "frequency": "14.074,00",
+                    "mode": "FT8",
+                    "rstSent": "-03",
+                    "rstRcvd": "-09",
+                },
+            },
+            {
+                "name": "RXFREQ fallback when FREQ is absent",
+                "message": """<?xml version="1.0" encoding="utf-8"?>
+<contact>
+  <app>Log4OM</app>
+  <timestamp>2026-05-03T09:10:11Z</timestamp>
+  <band>7</band>
+  <rxfreq>7074500</rxfreq>
+  <mode>FM</mode>
+  <call>EA3RXF</call>
+  <snt>59</snt>
+  <rcv>59</rcv>
+</contact>""",
+                "expected": {
+                    "callsign": "EA3RXF",
+                    "qsoDateTime": "2026-05-03T09:10:11Z",
+                    "band": "40m",
+                    "frequency": "7.074,50",
+                    "mode": "FM",
+                    "rstSent": "59",
+                    "rstRcvd": "59",
+                },
+            },
+            {
+                "name": "Unsupported hrd submode keeps payload but drops mode",
+                "message": """<?xml version="1.0" encoding="utf-8"?>
+<contactinfo>
+  <app>HamRadioDeluxe</app>
+  <timestamp>2026-05-03 12:00:01</timestamp>
+  <band>14</band>
+  <txfreq>14078000</txfreq>
+  <mode>MFSK</mode>
+  <submode>Q65</submode>
+  <call>EA3Q65</call>
+  <snt>-15</snt>
+  <rcv>-18</rcv>
+</contactinfo>""",
+                "expected": {
+                    "callsign": "EA3Q65",
+                    "qsoDateTime": "2026-05-03T12:00:01Z",
+                    "band": "20m",
+                    "frequency": "14.078,00",
+                    "rstSent": "-15",
+                    "rstRcvd": "-18",
+                },
+                "missing_keys": {"mode"},
+            },
+            {
+                "name": "N1MM digital voice collapsed from submode",
+                "message": """<?xml version="1.0" encoding="utf-8"?>
+<contactinfo>
+  <app>N1MM Logger+</app>
+  <timestamp>2026-05-03T16:20:30Z</timestamp>
+  <band>145</band>
+  <txfreq>145675000</txfreq>
+  <mode>DIGITALVOICE</mode>
+  <submode>DSTAR</submode>
+  <call>EA3DVS</call>
+  <snt>59</snt>
+  <rcv>59</rcv>
+</contactinfo>""",
+                "expected": {
+                    "callsign": "EA3DVS",
+                    "qsoDateTime": "2026-05-03T16:20:30Z",
+                    "band": "2m",
+                    "frequency": "145.675,00",
+                    "mode": "DIGITALVOICE",
+                    "rstSent": "59",
+                    "rstRcvd": "59",
+                },
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                parsed = UdpListener._parse_datagram(case["message"])
+                payload = window._build_contact_payload(parsed)
+
+                self.assertIsNotNone(payload)
+                for key, expected_value in case["expected"].items():
+                    self.assertEqual(payload.get(key), expected_value)
+                for key in case.get("missing_keys", set()):
+                    self.assertNotIn(key, payload)
 
 
 if __name__ == "__main__":

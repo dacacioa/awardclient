@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import re
 import struct
 import socket
 import threading
@@ -465,7 +466,7 @@ class MainWindow:
         ttk.Label(login_frame, text="Log:").grid(row=1, column=1, sticky="e")
         self.log_profile_combo = ttk.Combobox(
             login_frame,
-            values=["N1MM", "WSJT-X/JTDX"],
+            values=["N1MM", "QLog", "WSJT-X/JTDX"],
             state="readonly",
             textvariable=self.log_profile,
             width=16,
@@ -1285,7 +1286,76 @@ class MainWindow:
         profile = self.log_profile.get().strip().lower()
         if profile in {"wsjt-x/jtdx", "wsjtx", "jtdx"}:
             return self._parse_wsjtx_jtdx
+        if profile in {"qlog"}:
+            return self._parse_qlog
         return UdpListener._parse_datagram
+
+    @staticmethod
+    def _parse_qlog(data: Union[bytes, str]) -> Dict[str, str]:
+        if isinstance(data, bytes):
+            text = data.decode("utf-8", errors="ignore")
+        else:
+            text = data
+
+        raw = text.strip()
+        if not raw:
+            return {}
+
+        try:
+            packet = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            LOGGER.warning("Invalid QLog JSON datagram: %s", exc)
+            return {}
+
+        if str(packet.get("msgtype") or "").strip().lower() != "qso":
+            return {}
+
+        payload = packet.get("data")
+        if not isinstance(payload, dict):
+            return {}
+
+        operation = str(payload.get("operation") or "").strip().lower()
+        if operation != "insert":
+            return {}
+
+        if str(payload.get("type") or "").strip().lower() != "adif":
+            LOGGER.info("Ignoring unsupported QLog QSO type: %s", payload.get("type"))
+            return {}
+
+        adif_value = payload.get("value")
+        if not isinstance(adif_value, str) or not adif_value.strip():
+            return {}
+
+        fields = MainWindow._parse_adif_fields(adif_value)
+        return fields if fields.get("CALL", "").strip() else {}
+
+    @staticmethod
+    def _parse_adif_fields(adif: str) -> Dict[str, str]:
+        fields: Dict[str, str] = {}
+        index = 0
+        length = len(adif)
+        tag_pattern = re.compile(r"<([^:>]+):(\d+)(?::[^>]+)?>", re.IGNORECASE)
+
+        while index < length:
+            match = tag_pattern.search(adif, index)
+            if not match:
+                break
+
+            tag_name = match.group(1).strip().upper()
+            value_len = int(match.group(2))
+            value_start = match.end()
+            value_end = value_start + value_len
+            if value_end > length:
+                LOGGER.warning("Invalid ADIF field length for %s", tag_name)
+                break
+
+            fields[tag_name] = adif[value_start:value_end].strip()
+            index = value_end
+
+            if tag_name == "EOR":
+                break
+
+        return fields
 
     @staticmethod
     def _parse_wsjtx_jtdx(data: Union[bytes, str]) -> Dict[str, str]:
