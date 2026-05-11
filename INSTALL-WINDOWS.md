@@ -69,7 +69,7 @@ Premeu **Login**. Si la configuració és correcta, l'aplicació mostrarà un mi
 Comproveu que:
 
 - el **diploma** seleccionat és el correcte
-- el **format de log** és l'adequat: `N1MM` per a N1MM/Log4OM o `WSJT-X/JTDX` per a JTDX/WSJT-X
+- el **format de log** és l'adequat: `N1MM` per a N1MM/Log4OM/SWISSLOG/HRD, `WSJT-X/JTDX` per a JTDX/WSJT-X o `QLog` per a QLog
 
 Si l'usuari només té assignat un diploma, aquest quedarà seleccionat automàticament.
 
@@ -195,6 +195,23 @@ A WSJT-X, configureu el servidor UDP de la manera següent:
 
 ![Configuració UDP a WSJT-X](img/wsjt-x-1.png)
 
+## Configuració de QLog
+
+Si treballeu amb `QLog`, configureu `HamActivity Bridge` amb el format de log `QLog`.
+
+> Important: aquí, en el camp **Log** de `HamActivity Bridge`, s'ha de seleccionar l'opció `QLog`.
+
+A `QLog`, configureu l'enviament dels canvis de QSO de la manera següent:
+
+1. Obriu `Archivo` -> `Ajustes`.
+2. Aneu a la pestanya **Red**.
+3. Al camp **Cambios de QSO**, indiqueu `127.0.0.1:9091`.
+4. Deseu la configuració amb **Guardar**.
+
+![Accés a la configuració de QLog](img/qlog-1.png)
+
+![Configuració de xarxa de QLog](img/qlog-2.png)
+
 ## Verificació de recepció
 
 Quan el programa de log estigui correctament configurat i envieu un QSO, aquest hauria d'aparèixer al registre de `HamActivity Bridge` com a enviat correctament.
@@ -207,3 +224,4 @@ Quan el programa de log estigui correctament configurat i envieu un QSO, aquest 
 - Si tanqueu la sessió amb **Logout**, la recepció de dades UDP s'aturarà fins que torneu a fer **Login**.
 - Per a `N1MM`, `Log4OM`, `SWISSLOG` i `Ham Radio Deluxe (HRD)` el format de log recomanat a `HamActivity Bridge` és `N1MM`.
 - Per a `JTDX` i `WSJT-X`, el format de log recomanat és `WSJT-X/JTDX`.
+- Per a `QLog`, el format de log recomanat a `HamActivity Bridge` és `QLog`.
