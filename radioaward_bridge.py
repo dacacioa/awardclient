@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import logging
 import re
+import shutil
 import struct
 import socket
 import threading
@@ -87,7 +88,8 @@ class ApiClient:
     def __init__(self, base_url: str, api_key: str = "") -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
-        self._session = requests.Session()
+        self._ca_bundle_path = self._resolve_ca_bundle_path()
+        self._session = self._create_session()
 
     @property
     def api_key(self) -> str:
@@ -101,6 +103,76 @@ class ApiClient:
         self._api_key = api_key.strip()
         LOGGER.debug("API key updated (hidden)")
 
+    def _resolve_ca_bundle_path(self) -> Optional[str]:
+        source_raw = requests.certs.where()
+        if not source_raw:
+            return None
+
+        source = Path(source_raw)
+        target = Path.home() / ".hamactivity_bridge_cacert.pem"
+        if not source.exists():
+            LOGGER.warning("TLS CA bundle source is not available: %s", source)
+            return None
+
+        try:
+            if (
+                not target.exists()
+                or target.stat().st_size != source.stat().st_size
+                or target.stat().st_mtime < source.stat().st_mtime
+            ):
+                shutil.copy2(source, target)
+                LOGGER.info("TLS CA bundle copied to %s", target)
+            return str(target)
+        except OSError as exc:
+            LOGGER.warning(
+                "Unable to copy TLS CA bundle to %s, using source path %s: %s",
+                target,
+                source,
+                exc,
+            )
+            return str(source)
+
+    def _create_session(self) -> requests.Session:
+        session = requests.Session()
+        if self._ca_bundle_path:
+            session.verify = self._ca_bundle_path
+        return session
+
+    def _reset_session(self) -> None:
+        try:
+            self._session.close()
+        except Exception:
+            pass
+        self._ca_bundle_path = self._resolve_ca_bundle_path()
+        self._session = self._create_session()
+
+    @staticmethod
+    def _is_tls_path_error(exc: OSError) -> bool:
+        message = str(exc).lower()
+        return "invalid path" in message and "tls" in message
+
+    def _post_json(
+        self, url: str, payload: Dict[str, Any], *, timeout: int
+    ) -> requests.Response:
+        headers = {"Content-Type": "application/json"}
+        for attempt in range(2):
+            try:
+                return self._session.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=timeout,
+                )
+            except OSError as exc:
+                if attempt == 0 and self._is_tls_path_error(exc):
+                    LOGGER.warning(
+                        "Recovering from TLS certificate path error by recreating the HTTP session: %s",
+                        exc,
+                    )
+                    self._reset_session()
+                    continue
+                raise
+
     def login(self, api_key: Optional[str] = None) -> Dict[str, Any]:
         key = (api_key or self._api_key or "").strip()
         if not key:
@@ -111,12 +183,7 @@ class ApiClient:
         payload = {"apiKey": key}
         url = f"{self._base_url}/api/public/operators/login"
         LOGGER.info("Validating API key at %s", url)
-        response = self._session.post(
-            url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
+        response = self._post_json(url, payload, timeout=10)
 
         if response.status_code == 200:
             self._api_key = key
@@ -130,18 +197,12 @@ class ApiClient:
 
     def send_contact(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self._base_url}/api/public/contacts"
-        headers = {"Content-Type": "application/json"}
         last_exc: Optional[Exception] = None
 
         for attempt in range(1, 4):
             try:
                 LOGGER.info("Sending contact attempt %s", attempt)
-                response = self._session.post(
-                    url,
-                    json=payload,
-                    headers=headers,
-                    timeout=10,
-                )
+                response = self._post_json(url, payload, timeout=10)
                 if response.status_code == 201:
                     LOGGER.info("Contact stored successfully.")
                     return response.json()

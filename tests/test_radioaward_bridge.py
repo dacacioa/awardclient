@@ -1,10 +1,13 @@
 import datetime as dt
 import json
+from pathlib import Path
 import struct
+import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
-from radioaward_bridge import MainWindow, UdpListener, WsjtxDatagramReader
+from radioaward_bridge import ApiClient, MainWindow, UdpListener, WsjtxDatagramReader
 
 
 def make_window() -> MainWindow:
@@ -100,6 +103,56 @@ def build_qlog_qso_packet(
 
 
 class RadioAwardBridgeTests(unittest.TestCase):
+    def test_api_client_copies_ca_bundle_to_stable_user_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            source = tmp_path / "cacert-source.pem"
+            source.write_text("test-ca", encoding="utf-8")
+            home = tmp_path / "home"
+            home.mkdir()
+
+            session = mock.Mock()
+
+            with mock.patch("radioaward_bridge.requests.certs.where", return_value=str(source)):
+                with mock.patch("radioaward_bridge.requests.Session", return_value=session):
+                    with mock.patch("radioaward_bridge.Path.home", return_value=home):
+                        client = ApiClient("https://example.test")
+
+            stable_bundle = home / ".hamactivity_bridge_cacert.pem"
+            self.assertEqual(client._ca_bundle_path, str(stable_bundle))
+            self.assertEqual(session.verify, str(stable_bundle))
+            self.assertEqual(stable_bundle.read_text(encoding="utf-8"), "test-ca")
+
+    def test_api_client_retries_after_tls_invalid_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            source = tmp_path / "cacert-source.pem"
+            source.write_text("test-ca", encoding="utf-8")
+            home = tmp_path / "home"
+            home.mkdir()
+
+            first_session = mock.Mock()
+            second_session = mock.Mock()
+            response = mock.Mock(status_code=200)
+            response.json.return_value = {"operator": {}, "diplomas": []}
+            first_session.post.side_effect = OSError(
+                "Could not find a suitable TLS CA certificate bundle, invalid path: C:\\temp\\_MEI123\\cacert.pem"
+            )
+            second_session.post.return_value = response
+
+            with mock.patch("radioaward_bridge.requests.certs.where", return_value=str(source)):
+                with mock.patch(
+                    "radioaward_bridge.requests.Session",
+                    side_effect=[first_session, second_session],
+                ):
+                    with mock.patch("radioaward_bridge.Path.home", return_value=home):
+                        client = ApiClient("https://example.test", "12345678")
+                        data = client.login()
+
+            self.assertEqual(data, {"operator": {}, "diplomas": []})
+            self.assertEqual(first_session.post.call_count, 1)
+            self.assertEqual(second_session.post.call_count, 1)
+
     def test_xml_samples_build_expected_payloads(self) -> None:
         window = make_window()
         cases = [
