@@ -103,6 +103,20 @@ def build_qlog_qso_packet(
 
 
 class RadioAwardBridgeTests(unittest.TestCase):
+    def test_contact_payload_is_rejected_when_required_contract_fields_are_missing(self) -> None:
+        window = make_window()
+
+        payload = window._build_contact_payload(
+            {
+                "CALL": "EA3MISS",
+                "BAND": "20m",
+                "MODE": "MFSK",
+                "SUBMODE": "JS8",
+            }
+        )
+
+        self.assertIsNone(payload)
+
     def test_api_client_copies_ca_bundle_to_stable_user_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
@@ -282,6 +296,9 @@ class RadioAwardBridgeTests(unittest.TestCase):
                 parsed = UdpListener._parse_datagram(case["message"])
                 payload = window._build_contact_payload(parsed)
 
+                if case.get("missing_keys"):
+                    self.assertIsNone(payload)
+                    continue
                 self.assertIsNotNone(payload)
                 self.assertEqual(payload["apiKey"], "12345678-test-api-key")
                 self.assertEqual(payload["diplomaId"], "diploma-test-id")
@@ -588,6 +605,9 @@ class RadioAwardBridgeTests(unittest.TestCase):
                 parsed = UdpListener._parse_datagram(case["message"])
                 payload = window._build_contact_payload(parsed)
 
+                if case.get("missing_keys"):
+                    self.assertIsNone(payload)
+                    continue
                 self.assertIsNotNone(payload)
                 for key, expected_value in case["expected"].items():
                     self.assertEqual(payload.get(key), expected_value)

@@ -895,11 +895,11 @@ class MainWindow:
             data.get("BAND"),
             data.get("FREQ") or data.get("RXFREQ") or data.get("TXFREQ"),
         )
-        if band_value:
-            payload["band"] = band_value
-
-        if mode := self._normalize_mode(data.get("MODE"), data.get("SUBMODE")):
-            payload["mode"] = mode
+        mode_value = self._normalize_mode(data.get("MODE"), data.get("SUBMODE"))
+        if not band_value or not mode_value:
+            return None
+        payload["band"] = band_value
+        payload["mode"] = mode_value
 
         freq_value = self._normalize_frequency(
             data.get("FREQ") or data.get("RXFREQ") or data.get("TXFREQ"),
