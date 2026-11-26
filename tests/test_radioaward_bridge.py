@@ -7,7 +7,9 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from radioaward_bridge import ApiClient, MainWindow, UdpListener, WsjtxDatagramReader
+import requests
+
+from radioaward_bridge import ApiClient, MainWindow, SettingsManager, UdpListener, WsjtxDatagramReader
 
 
 def make_window() -> MainWindow:
@@ -103,6 +105,37 @@ def build_qlog_qso_packet(
 
 
 class RadioAwardBridgeTests(unittest.TestCase):
+    def test_base_url_requires_https_except_local_development(self) -> None:
+        self.assertEqual(ApiClient.validate_base_url(" https://example.test/ "), "https://example.test")
+        self.assertEqual(ApiClient.validate_base_url("http://localhost:3000"), "http://localhost:3000")
+        for url in ("http://example.test", "https://user:pass@example.test", "https://example.test/?x=1"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                ApiClient.validate_base_url(url)
+
+    def test_settings_store_api_key_in_local_json_with_restricted_permissions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = Path(tmpdir) / "settings.json"
+            manager = SettingsManager(config)
+            manager.save({"base_url": "https://example.test", "api_key": "secret-key"})
+            data = json.loads(config.read_text(encoding="utf-8"))
+            self.assertEqual(data["api_key"], "secret-key")
+            self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+
+    def test_settings_load_local_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = Path(tmpdir) / "settings.json"
+            config.write_text(json.dumps({"base_url": "https://example.test", "api_key": "old-secret"}), encoding="utf-8")
+            loaded = SettingsManager(config).load()
+            self.assertEqual(loaded["api_key"], "old-secret")
+
+    def test_contact_post_is_not_retried_after_network_error(self) -> None:
+        client = ApiClient("https://example.test")
+        client._session = mock.Mock()
+        client._session.post.side_effect = requests.ConnectionError("connection lost")
+        with self.assertRaises(requests.ConnectionError):
+            client.send_contact({"callsign": "EA3ABC"})
+        self.assertEqual(client._session.post.call_count, 1)
+
     def test_contact_payload_is_rejected_when_required_contract_fields_are_missing(self) -> None:
         window = make_window()
 

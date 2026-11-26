@@ -75,7 +75,12 @@ class SettingsManager:
 
     def save(self, settings: Dict[str, Any]) -> None:
         try:
-            self.path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+            temp_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+            temp_path.chmod(0o600)
+            temp_path.replace(self.path)
+            self.path.chmod(0o600)
             LOGGER.info("Settings saved to %s", self.path)
         except Exception as exc:  # pragma: no cover - defensive
             LOGGER.error("Unable to save settings: %s", exc)
@@ -86,7 +91,7 @@ class ApiClient:
     """Thin wrapper around the HamActivity REST API."""
 
     def __init__(self, base_url: str, api_key: str = "") -> None:
-        self._base_url = base_url.rstrip("/")
+        self._base_url = self.validate_base_url(base_url)
         self._api_key = api_key
         self._ca_bundle_path = self._resolve_ca_bundle_path()
         self._session = self._create_session()
@@ -96,8 +101,20 @@ class ApiClient:
         return self._api_key
 
     def set_base_url(self, base_url: str) -> None:
-        self._base_url = base_url.rstrip("/")
+        self._base_url = self.validate_base_url(base_url)
         LOGGER.debug("Base URL updated to %s", self._base_url)
+
+    @staticmethod
+    def validate_base_url(base_url: str) -> str:
+        from urllib.parse import urlsplit
+        value = base_url.strip().rstrip("/")
+        parsed = urlsplit(value)
+        local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if (parsed.scheme != "https" and not local_http) or not parsed.hostname:
+            raise ValueError("La URL debe usar HTTPS (se permite HTTP solo en localhost).")
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("La URL base no puede contener credenciales, parámetros ni fragmentos.")
+        return value
 
     def set_api_key(self, api_key: str) -> None:
         self._api_key = api_key.strip()
@@ -162,6 +179,7 @@ class ApiClient:
                     json=payload,
                     headers=headers,
                     timeout=timeout,
+                    allow_redirects=False,
                 )
             except OSError as exc:
                 if attempt == 0 and self._is_tls_path_error(exc):
@@ -197,30 +215,15 @@ class ApiClient:
 
     def send_contact(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self._base_url}/api/public/contacts"
-        last_exc: Optional[Exception] = None
-
-        for attempt in range(1, 4):
-            try:
-                LOGGER.info("Sending contact attempt %s", attempt)
-                response = self._post_json(url, payload, timeout=10)
-                if response.status_code == 201:
-                    LOGGER.info("Contact stored successfully.")
-                    return response.json()
-                msg = (
-                    f"Contact failed ({response.status_code}): "
-                    f"{response.text.strip()}"
-                )
-                LOGGER.warning(msg)
-                raise requests.HTTPError(msg, response=response)
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                last_exc = exc
-                LOGGER.warning("Network error: %s", exc)
-                if attempt < 3:
-                    time.sleep(2 ** (attempt - 1))  # backoff 1s, 2s
-            except requests.HTTPError as exc:
-                raise
-
-        raise last_exc or RuntimeError("Failed to send contact after retries.")
+        # A timed-out POST might already have been committed. Retrying without
+        # server-side idempotency could create duplicate QSOs.
+        response = self._post_json(url, payload, timeout=10)
+        if response.status_code == 201:
+            LOGGER.info("Contact stored successfully.")
+            return response.json()
+        msg = f"Contact failed ({response.status_code}): {response.text.strip()}"
+        LOGGER.warning(msg)
+        raise requests.HTTPError(msg, response=response)
 
 
 class UdpListener:
@@ -836,7 +839,8 @@ class MainWindow:
             self._store_signature_time(self._attempt_signatures, signature, qso_datetime)
 
         if self.debug_var.get():
-            self._log(f"[{timestamp}] Request: {json.dumps(payload)}")
+            safe_payload = {key: value for key, value in payload.items() if key != "apiKey"}
+            self._log(f"[{timestamp}] Request: {json.dumps(safe_payload)}")
         else:
             self._log(self._format_qso_summary(payload))
 

@@ -6,7 +6,7 @@ N1MM vía UDP y los publica en la API pública de HamActivity.
 ## Requisitos
 
 - Python 3.12+
-- Dependencias Python: `requests`.
+- Dependencias Python: `requests` (se instala desde `requirements.txt`).
 - Sistema operativo: Windows, macOS o Linux (Tkinter estándar).
 
 ## Instalación rápida
@@ -17,8 +17,7 @@ python -m venv .venv
 # o bien
 source .venv/bin/activate   # En macOS/Linux
 
-pip install -r requirements.txt  # si existe
-pip install requests
+pip install -r requirements.txt
 ```
 
 *Nota*: Tkinter viene incluido en las instalaciones estándar de Python para
@@ -31,8 +30,14 @@ Windows/macOS. Si usas distribuciones minimalistas verifica que el paquete
 python radioaward_bridge.py
 ```
 
-La aplicación guardará la URL base, API key, perfil de log y puerto UDP en
-`~/.hamactivity_bridge_settings.json`.
+La aplicación guardará la URL base, perfil de log y puerto UDP en
+`~/.hamactivity_bridge_settings.json`, incluida la API key. El fichero se crea
+con permisos de lectura y escritura solo para el usuario actual.
+
+La URL base requiere HTTPS. Solo se permite HTTP para `localhost` o loopback en
+desarrollo. Los envíos de QSOs no se reintentan automáticamente tras un error
+de red: la respuesta puede perderse después de que el servidor ya haya guardado
+el QSO, y reenviarlo podría duplicarlo.
 
 ### Flujo básico
 
